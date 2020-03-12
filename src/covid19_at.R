@@ -16,8 +16,16 @@ colors<- c("#c72321",
 
 theme_set(theme_classic(base_size = 14))
 
-### wikipedia url for old cases
+### wikipedia url
 wikipedia_url <- "https://de.wikipedia.org/wiki/COVID-19-F%C3%A4lle_in_%C3%96sterreich"
+
+figures_dir<-"../figures/"
+
+if (!file.exists(figures_dir)){
+  
+  dir.create(figures_dir)
+
+}
 
 scrape_wikipedia<-function(wikipedia_url = wikipedia_url){
 
@@ -63,14 +71,6 @@ scrape_wikipedia<-function(wikipedia_url = wikipedia_url){
   
 }
 
-url = "https://www.sozialministerium.at/Informationen-zum-Coronavirus/Neuartiges-Coronavirus-(2019-nCov).html"
-
-scrape_sozialministerium<-function(url = "https://www.sozialministerium.at/Informationen-zum-Coronavirus/Neuartiges-Coronavirus-(2019-nCov).html"){
-  webpage <- xml2::read_html(url)
-  
-}
-
-
 wikipedia_table_conv <- scrape_wikipedia()
   
 wikipedia_table_conv %>% 
@@ -85,6 +85,9 @@ wikipedia_table_conv %>%
   scale_color_manual(values = colors[c(1,5, 10)]) +
   ylab("Wert (Individuen)")
 
+ggsave("../figures/covid19_infektionen.png")
+
+
 first_value_testungen <- wikipedia_table_conv$`Testungen kumuliert`[1]
 
 wikipedia_table_conv %>% 
@@ -96,6 +99,6 @@ wikipedia_table_conv %>%
   geom_line(col = colors[1], size = 1) +
   ylab("Verhältnis Covid-19 Infektionen zu Tests (%)")
 
-ggsave("covid19_testungen.png")
+ggsave("../figures/covid19_testungen.png")
   
   
