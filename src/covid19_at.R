@@ -21,12 +21,6 @@ wikipedia_url <- "https://de.wikipedia.org/wiki/COVID-19-F%C3%A4lle_in_%C3%96ste
 
 figures_dir<-"../figures/"
 
-if (!file.exists(figures_dir)){
-  
-  dir.create(figures_dir)
-
-}
-
 scrape_wikipedia<-function(wikipedia_url = wikipedia_url){
 
   webpage <- xml2::read_html(webpage_url)
@@ -40,9 +34,9 @@ scrape_wikipedia<-function(wikipedia_url = wikipedia_url){
                                 "Infektionen kumuliert",
                                 "Genesen kumuliert",
                                 "Aktuell Infizierte",
+                                "Todesfälle kumuliert",
                                 "Neuinfektionen",	
-                                "Testungen kumuliert",	
-                                "Todesfälle kumuliert")
+                                "Testungen kumuliert")
 
   wikipedia_table_clean <- wikipedia_table_clean %>% 
     mutate(Datum = str_replace(Datum, "[\\(]","")) %>% 
@@ -102,3 +96,12 @@ wikipedia_table_conv %>%
 ggsave("../figures/covid19_testungen.png")
   
   
+wikipedia_table_conv %>% 
+  mutate(Testungen = c(first_value_testungen, diff(`Testungen kumuliert`))) %>% 
+  dplyr::select(Datum, `Testungen kumuliert`, Testungen, Neuinfektionen) %>% 
+  ggplot(aes(x = Datum, `Testungen`)) +
+  geom_point(col = colors[1]) +
+  geom_line(col = colors[1], size = 1) +
+  ylab("Testungen")
+
+ggsave("../figures/covid19_testungen_absolut.png")
