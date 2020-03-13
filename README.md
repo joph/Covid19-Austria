@@ -8,4 +8,9 @@ rvest, tidyverse, xml2
 ## How to run
 R covid19_at.R
 
-Will creates a directory ../figures/ where final plots are saved.
+### Creates these figures
+![infections](figures/covid19_infektionen.png)
+![infections](figures/covid19_testungen.png)
+![infections](figures/covid19_testungen_absolut.png)
+
+
