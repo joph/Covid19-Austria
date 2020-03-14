@@ -66,6 +66,8 @@ scrape_wikipedia<-function(wikipedia_url = wikipedia_url){
 }
 
 wikipedia_table_conv <- scrape_wikipedia()
+
+last_date<-wikipedia_table_conv$Datum[nrow(wikipedia_table_conv)]
   
 wikipedia_table_conv %>% 
   gather(Variable, Value, -Datum) %>% 
@@ -77,7 +79,9 @@ wikipedia_table_conv %>%
   geom_line(aes(col = Variable),
             size=1) +
   scale_color_manual(values = colors[c(1,5, 10)]) +
-  ylab("Wert (Individuen)")
+  ylab("Wert (Individuen)") +
+  labs(caption = paste("Source: Wikipedia. Latest data point: ", last_date))
+  
 
 ggsave("../figures/covid19_infektionen.png")
 
@@ -91,7 +95,9 @@ wikipedia_table_conv %>%
   ggplot(aes(x = Datum, `Verhältnis Infektionen zu Tests`)) +
   geom_point(col = colors[1]) +
   geom_line(col = colors[1], size = 1) +
-  ylab("Verhältnis Covid-19 Infektionen zu Tests (%)")
+  ylab("Verhältnis Covid-19 Infektionen zu Tests (%)") +
+  labs(caption = paste("Source: Wikipedia. Latest data point: ", last_date))
+
 
 ggsave("../figures/covid19_testungen.png")
   
@@ -102,6 +108,8 @@ wikipedia_table_conv %>%
   ggplot(aes(x = Datum, `Testungen`)) +
   geom_point(col = colors[1]) +
   geom_line(col = colors[1], size = 1) +
-  ylab("Testungen")
+  ylab("Testungen") +
+  labs(caption = paste("Source: Wikipedia. Latest data point: ", last_date))
+
 
 ggsave("../figures/covid19_testungen_absolut.png")
