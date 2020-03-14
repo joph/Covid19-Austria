@@ -17,13 +17,13 @@ colors<- c("#c72321",
 theme_set(theme_classic(base_size = 14))
 
 ### wikipedia url
-wikipedia_url <- "https://de.wikipedia.org/wiki/COVID-19-F%C3%A4lle_in_%C3%96sterreich"
+wikipedia_url_ <- "https://de.wikipedia.org/wiki/COVID-19-F%C3%A4lle_in_%C3%96sterreich"
 
 figures_dir<-"../figures/"
 
-scrape_wikipedia<-function(wikipedia_url = wikipedia_url){
+scrape_wikipedia<-function(wikipedia_url = wikipedia_url_){
 
-  webpage <- xml2::read_html(webpage_url)
+  webpage <- xml2::read_html(wikipedia_url)
 
   wikipedia_table <- rvest::html_table(webpage, fill = TRUE)[[3]] 
 
@@ -65,7 +65,16 @@ scrape_wikipedia<-function(wikipedia_url = wikipedia_url){
   
 }
 
+
+wikipedia_table_conv_old <- NULL
+if(file.exists("../data/data.feather")){
+  wikipedia_table_conv_old <- feather("../data/data.feather")
+}
+
 wikipedia_table_conv <- scrape_wikipedia()
+
+write_feather(wikipedia_table_conv, "../data/data.feather")
+
 
 last_date<-wikipedia_table_conv$Datum[nrow(wikipedia_table_conv)]
   
@@ -113,3 +122,45 @@ wikipedia_table_conv %>%
 
 
 ggsave("../figures/covid19_testungen_absolut.png")
+
+library(feather)
+
+
+
+tweet<-FALSE
+
+if(is.null(wikipedia_table_conv_old)){
+  tweet<-TRUE  
+}else{
+  
+    last_date_old<-wikipedia_table_conv_old$Datum[nrow(wikipedia_table_conv)]
+    if(last_date>last_date_old){
+      
+      tweet<-TRUE
+    
+      }
+}
+
+if(tweet){
+  authentification <- feather("../authentification")
+
+  library(twitteR)
+  setup_twitter_oauth(consumer_key = authentification$consumer_key[1],
+                    access_token = authentification$access_token[1],
+                    consumer_secret = authentification$consumer_secret[1],
+                    access_secret = authentification$access_secret[1])
+
+  tweet1<-updateStatus(text = "#COVID_19 Data Update für Österreich. Neuinfektionen: ", 
+             mediaPath = "../figures/covid19_infektionen.png"
+             )
+
+  tweet2<-updateStatus(text = "#COVID_19 Data Update für Österreich. Verhältnis Infektionen:Tests ", 
+                     mediaPath = "../../figures/covid19_testungen.png",
+                     inReplyTo=tweet1$id)
+
+
+  tweet3<-updateStatus(text = "#COVID_19 Data Update für Österreich. Gesamtanzahl Tests", 
+                     mediaPath = "../../figures/covid19_testungen_absolut.png",
+                     inReplyTo=tweet2$id)
+}
+
