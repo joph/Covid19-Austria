@@ -1,6 +1,7 @@
 library(rvest)
 library(tidyverse)
 library(xml2)
+library(feather)
 
 
 colors<- c("#c72321", 
@@ -123,7 +124,6 @@ wikipedia_table_conv %>%
 
 ggsave("../figures/covid19_testungen_absolut.png")
 
-library(feather)
 
 
 
