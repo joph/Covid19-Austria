@@ -16,6 +16,7 @@ R covid19_at.R
 
 ### Creates these figures
 ![infections](figures/covid19_infektionen.png)
+![infections](figures/covid19_predictions.png)
 ![infections](figures/covid19_testungen.png)
 ![infections](figures/covid19_testungen_absolut.png)
 

@@ -2,6 +2,7 @@ library(rvest)
 library(tidyverse)
 library(xml2)
 library(feather)
+library(moderndive)
 
 
 colors<- c("#c72321", 
@@ -78,7 +79,8 @@ write_feather(wikipedia_table_conv, "../data/data.feather")
 
 
 last_date<-wikipedia_table_conv$Datum[nrow(wikipedia_table_conv)]
-  
+
+#### plot overview data
 wikipedia_table_conv %>% 
   gather(Variable, Value, -Datum) %>% 
   filter(Variable %in% c("Infektionen kumuliert",
@@ -90,13 +92,56 @@ wikipedia_table_conv %>%
             size=1) +
   scale_color_manual(values = colors[c(1,5, 10)]) +
   ylab("Wert (Individuen)") +
-  labs(caption = paste("Source: Wikipedia. Latest data point: ", last_date))
+  labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", last_date))
   
 
 ggsave("../figures/covid19_infektionen.png")
 
+#### plot prediction
+
+wikipedia_table_conv<-wikipedia_table_conv %>% 
+  mutate(Infektionen = `Infektionen kumuliert`) %>% 
+  mutate(log_Infektionen = log(Infektionen))
+
+mod<-lm(log_Infektionen ~ Datum, data=wikipedia_table_conv)
+
+week_ahead<-data.frame(Datum = seq(as.POSIXct(last_date + 3600*24), as.POSIXct(Sys.Date() + 8), 3600*24))
+
+predictions<-predict(mod, week_ahead)
+
+forecast<-bind_cols(mod$model,
+          data.frame(fitted=mod$fitted.values)) %>% 
+          bind_rows(data.frame(Datum = week_ahead, fitted = predictions)) %>% 
+  mutate(Infektionen = exp(log_Infektionen),
+         Prediction = exp(fitted)) %>% 
+  dplyr::select(Datum, Infektionen, Prediction) %>% 
+  gather(Variable, Value, -Datum)
+
+prediction_week_ahead <- forecast %>% 
+  filter(Variable == "Prediction") %>% 
+  dplyr::select(Value) %>% 
+  tail(1) %>% 
+  unlist()
+
+forecast %>% 
+  write_feather(path = paste0("../data/prediction", Sys.Date()))
+
+forecast %>% 
+  ggplot(aes(x = Datum, y = Value)) + 
+  geom_point(aes(col = Variable)) +
+  geom_line(aes(col = Variable, linetype = Variable), size = 1.1) +
+  scale_color_manual(values = colors) +
+  ylab("Infektionen (Fälle)") +
+  labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:", 
+                       last_date, 
+                       "\nVorhersage Infektionen in einer Woche (exponentielles Modell): ", 
+                       round(prediction_week_ahead)))
+
+ggsave("../figures/covid19_predictions.png")  
 
 first_value_testungen <- wikipedia_table_conv$`Testungen kumuliert`[1]
+
+#### plot test statistics
 
 wikipedia_table_conv %>% 
   mutate(Testungen = c(first_value_testungen, diff(`Testungen kumuliert`))) %>% 
@@ -106,11 +151,12 @@ wikipedia_table_conv %>%
   geom_point(col = colors[1]) +
   geom_line(col = colors[1], size = 1) +
   ylab("Verhältnis Covid-19 Infektionen zu Tests (%)") +
-  labs(caption = paste("Source: Wikipedia. Latest data point: ", last_date))
+  labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", last_date))
 
 
 ggsave("../figures/covid19_testungen.png")
   
+#### plot number of tests
   
 wikipedia_table_conv %>% 
   mutate(Testungen = c(first_value_testungen, diff(`Testungen kumuliert`))) %>% 
@@ -119,13 +165,14 @@ wikipedia_table_conv %>%
   geom_point(col = colors[1]) +
   geom_line(col = colors[1], size = 1) +
   ylab("Testungen") +
-  labs(caption = paste("Source: Wikipedia. Latest data point: ", last_date))
+  labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", last_date))
 
 
 ggsave("../figures/covid19_testungen_absolut.png")
 
 
 
+#### tweet results, if new
 
 tweet<-FALSE
 
@@ -154,13 +201,19 @@ if(tweet){
              mediaPath = "../figures/covid19_infektionen.png"
              )
 
-  tweet2<-updateStatus(text = "#COVID_19 Data Update für Österreich. Verhältnis Infektionen:Tests ", 
-                     mediaPath = "../../figures/covid19_testungen.png",
-                     inReplyTo=tweet1$id)
-
-
-  tweet3<-updateStatus(text = "#COVID_19 Data Update für Österreich. Gesamtanzahl Tests", 
-                     mediaPath = "../../figures/covid19_testungen_absolut.png",
+  tweet2<-updateStatus(text = "#COVID_19 Vorhersage mit exponentiellem Modell: ", 
+                       mediaPath = "../figures/covid19_predictions.png",
+                       inReplyTo=tweet1$id
+  )
+  
+  tweet3<-updateStatus(text = "#COVID_19 Data Update für Österreich. Verhältnis Infektionen:Tests ", 
+                     mediaPath = "../figures/covid19_testungen.png",
                      inReplyTo=tweet2$id)
+
+
+  tweet4<-updateStatus(text = "#COVID_19 Data Update für Österreich. Gesamtanzahl Tests", 
+                     mediaPath = "../figures/covid19_testungen_absolut.png",
+                     inReplyTo=tweet3$id)
 }
+
 
