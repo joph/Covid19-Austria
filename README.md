@@ -38,8 +38,8 @@ plot_number_tests(wikipedia_tables_new)
 
 
 ### Creates these figures
-<img src = "figures/covid19_infektionen.png" width="400">
-<img src = "figures/covid19_predictions.png" width="400">
-<img src = "figures/covid19_testungen.png" width="400">
-<img src = "figures/covid19_testungen_absolut.png" width="400">
+<img src = "figures/covid19_infektionen.png" width="600">
+<img src = "figures/covid19_predictions.png" width="600">
+<img src = "figures/covid19_testungen.png" width="600">
+<img src = "figures/covid19_testungen_absolut.png" width="600">
 
