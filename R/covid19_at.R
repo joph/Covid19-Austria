@@ -118,17 +118,13 @@ plot_overview<-function(wikipedia_table){
 }
 
 
-exp_mod<-function(wikipedia_table,
+generic_mod<-function(wikipedia_table_in,
               minus_n,
               week_ahead,
               type){
 
-  wikipedia_table<-wikipedia_table %>%
-    mutate(Infektionen = `Infektionen kumuliert`) %>%
-    mutate(log_Infektionen = log(Infektionen))
-
-  wikipedia_table<-wikipedia_table[1:(nrow(wikipedia_table)-minus_n),]
-  mod<-lm(log_Infektionen ~ Datum, data = wikipedia_table)
+  wikipedia_table_short<-wikipedia_table_in[1:(nrow(wikipedia_table_in)-minus_n),]
+  mod<-lm(Infektionen_trans ~ Datum, data = wikipedia_table_short)
 
   predictions<-predict(mod, week_ahead)
 
@@ -140,18 +136,26 @@ exp_mod<-function(wikipedia_table,
 
 }
 
+
 #### plot prediction
 plot_prediction<-function(wikipedia_table,
                           final_date,
-                          steps = 3){
+                          steps = 3,
+                          transformation_f = log,
+                          transformation_f_inverse = exp){
 
 
 
+  wikipedia_table_transform <- wikipedia_table %>%
+    mutate(Infektionen_trans = transformation_f(`Infektionen kumuliert`))
 
-  week_ahead<-data.frame(Datum = seq(as.POSIXct(get_first_date(wikipedia_table) + 3600*24), as.POSIXct(final_date), 3600*24))
+  week_ahead<-data.frame(Datum = c(wikipedia_table_transform$Datum,
+                                   seq(as.POSIXct(get_last_date(wikipedia_table) + 3600*24),
+                                       as.POSIXct(final_date),
+                                       3600*24)))
 
-  results <- mapply(exp_mod,
-         list(wikipedia_table),
+  results <- mapply(generic_mod,
+         list(wikipedia_table_transform),
          1:steps,
          list(week_ahead),
          paste0("M",1:steps),
@@ -159,11 +163,12 @@ plot_prediction<-function(wikipedia_table,
 
   res<-bind_rows(results)
 
-  forecast<-bind_cols(mod1$model,
-          data.frame(fitted=mod1$fitted.values, Type = "M")) %>%
+  forecast<-bind_cols(data.frame(Datum = wikipedia_table_transform$Datum,
+                                 Infektionen_trans = (wikipedia_table_transform$Infektionen_trans)),
+          data.frame(fitted=rep(NA, nrow(wikipedia_table_transform)), Type = "M")) %>%
           bind_rows(res) %>%
-        mutate(Infektionen = exp(log_Infektionen),
-         Prediction = exp(fitted)) %>%
+        mutate(Infektionen = transformation_f_inverse(Infektionen_trans),
+         Prediction = transformation_f_inverse(fitted)) %>%
     dplyr::select(Datum, Infektionen, Prediction, Type) %>%
     gather(Variable, Value, -Datum, -Type)
 
@@ -194,6 +199,7 @@ plot_prediction<-function(wikipedia_table,
 
   p
 }
+
 
 #### plot test statistics
 
