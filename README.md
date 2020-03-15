@@ -1,23 +1,45 @@
 # Covid19-Austria
 
-Script which scrapes Austrian infection data from wikipedia and produces figures on infections and infection to test ratios.
+Package which scrapes Austrian infection data from wikipedia and produces figures on infections and infection to test ratios.
 Automatically posts figures to twitter. (needs a twitter app configured).
 
-## Dependencies (R-packages)
-rvest, tidyverse, xml2, feather
-
-## Dependencies with automatic tweeting feature
-twitteR
+## Installation
+Works with package devtools (install before usage!).
+<pre><code>
+devtools::install_github("joph/covid19at")
+</code></pre>
 
 Please see [here](https://www.r-bloggers.com/send-tweets-from-r-a-very-short-walkthrough/) for how to configure twitteR in R.
 
-## How to run
-R covid19_at.R
+## Example script
+<pre><code>
+library(covid19at)
+library(ggplot2)
+
+wikipedia_tables <- scrape_wikipedia()
+
+wikipedia_tables_new <- wikipedia_tables[[1]]
+wikipedia_tables_old <- wikipedia_tables[[2]]
+
+theme_set(theme_classic(base_size = 14))
+
+plot_overview(wikipedia_tables_new)
+
+plot_prediction(wikipedia_tables_new,
+                Sys.Date() + 6,
+                3)
+
+plot_test_statistics(wikipedia_tables_new)
+
+plot_number_tests(wikipedia_tables_new)
+
+
+</code></pre>
+
 
 ### Creates these figures
-![infections](figures/covid19_infektionen.png)
-![infections](figures/covid19_predictions.png)
-![infections](figures/covid19_testungen.png)
-![infections](figures/covid19_testungen_absolut.png)
-
+![infections](figures/covid19_infektionen.png =250x)
+![infections](figures/covid19_predictions.png =250x)
+![infections](figures/covid19_testungen.png =250x)
+![infections](figures/covid19_testungen_absolut.png =250x)
 

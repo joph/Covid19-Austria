@@ -1,0 +1,22 @@
+Package: covid19at
+Type: Package
+Title: Downloads covid19 infection data for austria, creates figures and fits models
+Version: 0.1.0
+Author: Johannes Schmidt
+Maintainer: johannes schmidt <johannes.schmidt@boku.ac.at>
+Description: Downloads covid19 infection data for austria, creates figures and fits models   fits an exponential model to infection data
+License: MIT 3.0
+Encoding: UTF-8
+LazyData: true
+Imports: 
+    dplyr,
+    readxl,
+    feather,
+    tidyr,
+    magrittr,
+    ggplot2,
+    xml2,
+    rvest,
+    twitteR,
+    moderndive,
+    stringr

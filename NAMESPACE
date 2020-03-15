@@ -1,0 +1,13 @@
+exportPattern("^[[:alpha:]]+")
+import(dplyr)
+import(readxl)
+import(stringr)
+import(feather)
+import(tidyr)
+import(magrittr)
+import(ggplot2)
+import(xml2)
+import(rvest)
+import(twitteR)
+import(moderndive)
+
