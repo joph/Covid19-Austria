@@ -36,10 +36,13 @@ plot_number_tests(wikipedia_tables_new)
 
 </code></pre>
 
+plo
+
 
 ### Creates these figures
-<img src = "figures/covid19_infektionen.png" width="600">
 <img src = "figures/covid19_predictions.png" width="600">
+<img src = "figures/vergleich_at_it.png" width="600">
+<img src = "figures/covid19_infektionen.png" width="600">
 <img src = "figures/covid19_testungen.png" width="600">
 <img src = "figures/covid19_testungen_absolut.png" width="600">
 
