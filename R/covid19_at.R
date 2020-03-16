@@ -151,7 +151,7 @@ plot_prediction<-function(wikipedia_table,
 
   week_ahead<-data.frame(Datum = c(wikipedia_table_transform$Datum,
                                    seq(as.POSIXct(get_last_date(wikipedia_table) + 3600*24),
-                                       as.POSIXct(final_date),
+                                       as.POSIXct(final_date) + 3600 * 16,
                                        3600*24)))
 
   results <- mapply(generic_mod,
