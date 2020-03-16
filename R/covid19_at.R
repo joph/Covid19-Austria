@@ -12,9 +12,18 @@ COLORS <- c("#c72321",
 
 
 ### wikipedia url
-WIKIPEDIA_URL <- "https://de.wikipedia.org/wiki/COVID-19-F%C3%A4lle_in_%C3%96sterreich"
+WIKIPEDIA_URL_AT <- "https://de.wikipedia.org/wiki/COVID-19-F%C3%A4lle_in_%C3%96sterreich"
 
-scrape_wikipedia<-function(wikipedia_url = WIKIPEDIA_URL){
+WIKIPEDIA_URL_IT <- "https://de.wikipedia.org/wiki/COVID-19-Epidemie_in_Italien"
+
+
+### source eurostat
+INHABITANTS_ITALY <- 60.48*10^6
+
+### source eurostat
+INHABITANTS_AUSTRIA <- 8.82*10^6
+
+scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 
   if(!dir.exists("figures")){
     dir.create("figures")
@@ -65,6 +74,7 @@ scrape_wikipedia<-function(wikipedia_url = WIKIPEDIA_URL){
 
 
   wikipedia_table_conv_old <- NULL
+
   if(file.exists("data/data.feather")){
     wikipedia_table_conv_old <- feather("data/data.feather")
   }
@@ -72,9 +82,79 @@ scrape_wikipedia<-function(wikipedia_url = WIKIPEDIA_URL){
   write_feather(wikipedia_table_conv, "data/data.feather")
 
 
-  return(list(wikipedia_table_conv, wikipedia_table_conv_old))
+  return(list(wikipedia_table_conv,
+              wikipedia_table_conv_old))
 
 }
+
+scrape_wikipedia_it<-function(wikipedia_url = WIKIPEDIA_URL_IT){
+
+  if(!dir.exists("figures")){
+    dir.create("figures")
+  }
+
+  if(!dir.exists("data")){
+    dir.create("data")
+  }
+
+
+  webpage <- xml2::read_html(wikipedia_url)
+
+  wikipedia_table <- rvest::html_table(webpage, fill = TRUE)[[2]]
+
+  wikipedia_table_clean <- wikipedia_table %>%
+    mutate(Datum = str_replace(Datum, "[\\(]","")) %>%
+    mutate(Datum = str_replace(Datum, "[\\)]","")) %>%
+    mutate(Datum = str_replace(Datum, "\\.20", ".2020 "))   %>%
+    mutate(Datum = as.POSIXct(Datum, format = "%d.%m.%Y %H:%M")) %>%
+    filter(!is.na(Datum)) %>%
+    mutate(Infektionen = `Infektionen (kumuliert)`)
+
+  #wikipedia_table_clean <- wikipedia_table_clean %>%
+  #  mutate(`Testungen kumuliert` = str_replace(`Testungen kumuliert`, "\\.", "")) %>%
+  #  mutate(`Testungen kumuliert` = str_replace(`Testungen kumuliert`, "\\[.*\\]", "")) %>%
+  #  mutate() %>%
+  #  as_tibble()
+
+  return(wikipedia_table_clean)
+
+}
+
+plot_compare_at_it<-function(){
+
+
+  wiki_at <- covid19at::scrape_wikipedia_at()[[1]]
+  wiki_it <- covid19at::scrape_wikipedia_it()
+
+  wiki_at <- wiki_at %>%
+    mutate(Infektionen = `Infektionen kumuliert` / INHABITANTS_AUSTRIA) %>%
+    mutate(Country = "Österreich \n (8 Tage nach vorne versetzt)") %>%
+    dplyr::select(Datum, Country, Infektionen) %>%
+    mutate(Datum = Datum - 24*3600*8)
+
+  wiki_it <- wiki_it %>%
+    mutate(Infektionen = Infektionen / INHABITANTS_ITALY) %>%
+    mutate(Country = "Italien") %>%
+    dplyr::select(Datum, Country, Infektionen)
+
+  #wiki_it <- wiki_it[-1,]
+
+  p<-merged %>%
+    ggplot(aes(x = Datum, y = Infektionen * 100)) +
+    geom_line(aes(col = Country), size = 1) +
+    geom_point(aes(col = Country)) +
+    scale_color_manual(values = COLORS[c(1,6)]) +
+    ylab("Infektionen (% Gesamtpopulation)")
+
+  ggsave("figures/vergleich_at_it.png",
+         p,
+         width = 10,
+         height = 5)
+
+  p
+
+}
+
 
 
 get_last_date<-function(wikipedia_table){
@@ -215,7 +295,7 @@ plot_test_statistics<-function(wikipedia_table){
     ggplot(aes(x = Datum, `Verh?ltnis Infektionen zu Tests`)) +
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1], size = 1) +
-    ylab("Verh?ltnis Covid-19 Infektionen zu Tests (%)") +
+    ylab("Verhaeltnis Covid-19 Infektionen zu Tests (%)") +
     labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(wikipedia_table)))
 
 
@@ -262,6 +342,7 @@ tweet_results_if_new <- function(wikipedia_table_conv, wikipedia_table_conv_old)
     tweet<-TRUE
   }else{
 
+    last_date<-get_last_date(wikipedia_table_conv)
     last_date_old<-get_last_date(wikipedia_table_conv_old)
     if(last_date>last_date_old){
 
@@ -278,23 +359,33 @@ tweet_results_if_new <- function(wikipedia_table_conv, wikipedia_table_conv_old)
                     consumer_secret = authentification$consumer_secret[1],
                     access_secret = authentification$access_secret[1])
 
-    tweet1<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Neuinfektionen: ",
-             mediaPath = "figures/covid19_infektionen.png"
-             )
 
-    tweet2<-updateStatus(text = "#COVID_19 Vorhersage mit exponentiellem Modell: ",
-                       mediaPath = "figures/covid19_predictions.png",
-                       inReplyTo=tweet1$id
+    tweet1<-updateStatus(text = "#COVID_19 Vorhersage mit exponentiellem Modell: M1: alle Datenpunkte, M2: alle Datenpunkte bis gestern. M3: alle Datenpunkte bis vorgestern.",
+                       mediaPath = "figures/covid19_predictions.png"
                         )
 
-    tweet3<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Verhaeltnis Infektionen:Tests ",
+    tweet2<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Vergleich Infektionen Italien und Österreich (8 Tage nach vorne versetzt): ",
+                         mediaPath = "figures/vergleich_at_it.png.png",
+                         inReplyTo=tweet1$id
+    )
+
+
+    tweet3<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Neuinfektionen: ",
+                         mediaPath = "figures/covid19_infektionen.png",
+                         inReplyTo=tweet2$id
+    )
+
+
+
+
+    tweet4<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Verhaeltnis Infektionen:Tests ",
                      mediaPath = "figures/covid19_testungen.png",
-                     inReplyTo=tweet2$id)
-
-
-    tweet4<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Gesamtanzahl Tests",
-                     mediaPath = "figures/covid19_testungen_absolut.png",
                      inReplyTo=tweet3$id)
+
+
+    tweet5<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Gesamtanzahl Tests",
+                     mediaPath = "figures/covid19_testungen_absolut.png",
+                     inReplyTo=tweet4$id)
   }
 
 
