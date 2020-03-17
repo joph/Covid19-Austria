@@ -332,11 +332,11 @@ plot_number_tests<-function(wikipedia_table){
 }
 
 
-#### tweet results, if new
+#### tweet results
 
-tweet_results_if_new <- function(wikipedia_table_conv, wikipedia_table_conv_old){
+tweet_results <- function(wikipedia_table_conv, wikipedia_table_conv_old, tweet_always = FALSE){
 
-  tweet<-FALSE
+  tweet<-tweet_always
 
   if(is.null(wikipedia_table_conv_old)){
     tweet<-TRUE
@@ -365,7 +365,7 @@ tweet_results_if_new <- function(wikipedia_table_conv, wikipedia_table_conv_old)
                         )
 
     tweet2<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Vergleich Infektionen Italien und Österreich (8 Tage nach vorne versetzt): ",
-                         mediaPath = "figures/vergleich_at_it.png.png",
+                         mediaPath = "figures/vergleich_at_it.png",
                          inReplyTo=tweet1$id
     )
 
@@ -375,9 +375,6 @@ tweet_results_if_new <- function(wikipedia_table_conv, wikipedia_table_conv_old)
                          inReplyTo=tweet2$id
     )
 
-
-
-
     tweet4<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Verhaeltnis Infektionen:Tests ",
                      mediaPath = "figures/covid19_testungen.png",
                      inReplyTo=tweet3$id)
@@ -386,6 +383,12 @@ tweet_results_if_new <- function(wikipedia_table_conv, wikipedia_table_conv_old)
     tweet5<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Gesamtanzahl Tests",
                      mediaPath = "figures/covid19_testungen_absolut.png",
                      inReplyTo=tweet4$id)
+
+    tweet6<-updateStatus(text = "#COVID_19 #R-Stats Code for analysis of Austrian infection data here: https://github.com/joph/Covid19-Austria",
+                         inReplyTo=tweet5$id)
+
+
+
   }
 
 

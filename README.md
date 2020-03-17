@@ -23,20 +23,23 @@ wikipedia_tables_old <- wikipedia_tables[[2]]
 
 theme_set(theme_classic(base_size = 14))
 
-plot_overview(wikipedia_tables_new)
-
 plot_prediction(wikipedia_tables_new,
                 Sys.Date() + 6,
                 3)
+				
+plot_compare_at_it()
+
+plot_overview(wikipedia_tables_new)
 
 plot_test_statistics(wikipedia_tables_new)
 
 plot_number_tests(wikipedia_tables_new)
 
 
+
 </code></pre>
 
-plo
+
 
 
 ### Creates these figures
