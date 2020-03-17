@@ -20,3 +20,4 @@ Imports:
     twitteR,
     moderndive,
     stringr
+RoxygenNote: 7.0.2

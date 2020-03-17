@@ -10,7 +10,7 @@ wikipedia_tables_old <- wikipedia_tables[[2]]
 
 theme_set(theme_classic(base_size = 14))
 
-plot_overview(wikipedia_tables_new)
+plot_overview_at(wikipedia_tables_new)
 
 plot_prediction(wikipedia_tables_new,
                 Sys.Date() + 3,
@@ -18,13 +18,13 @@ plot_prediction(wikipedia_tables_new,
                 log,
                 exp)
 
-plot_test_statistics(wikipedia_tables_new)
+plot_infected_tests_ratio(wikipedia_tables_new)
 
 plot_number_tests(wikipedia_tables_new)
 
 plot_compare_at_it()
 
-tweet_results_if_new(wikipedia_tables_new,
+tweet_resultss(wikipedia_tables_new,
                      wikipedia_tables_old)
 
 

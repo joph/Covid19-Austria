@@ -16,6 +16,11 @@ WIKIPEDIA_URL_AT <- "https://de.wikipedia.org/wiki/COVID-19-F%C3%A4lle_in_%C3%96
 
 WIKIPEDIA_URL_IT <- "https://de.wikipedia.org/wiki/COVID-19-Epidemie_in_Italien"
 
+OVERVIEW_FILENAME <- "figures/covid19_infektionen.png"
+MODEL_FILENAME <- "figures/covid19_predictions.png"
+COMPARISON_AT_IT_FILENAME <- "figures/vergleich_at_it.png"
+INFECTED_TEST_RATIO_FILENAME <- "figures/covid19_infektionen_tests_ratio.png"
+NMB_TESTS_FILENAME <- "figures/covid19_anzahl_tests.png"
 
 ### source eurostat
 INHABITANTS_ITALY <- 60.48*10^6
@@ -23,6 +28,16 @@ INHABITANTS_ITALY <- 60.48*10^6
 ### source eurostat
 INHABITANTS_AUSTRIA <- 8.82*10^6
 
+
+#' Download, clean and save data on infections in Austria from wikipedia
+#'
+#' Downloads the data and saves a feather file with the data in data/data.feather
+#'
+#' @param url Url to the wikipedia page. Is preconfigured and may only be changed if wikipedia URL changed.
+#' @return A list of two tibbles: the first elment contains a tibble with up-to-date data, the second element contains a tibble with the last data set loaded from disk.
+#'                                Both tibbles have the same format and include all information from the wikipedia table.
+#' @examples
+#' scrape_wikipedia_at()
 scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 
   if(!dir.exists("figures")){
@@ -87,6 +102,13 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 
 }
 
+#' Download, clean and save data on infections in Italy from wikipedia
+#'
+#' @param url Url to the wikipedia page. Is preconfigured and may only be changed if wikipedia URL changed.
+#' @return A tibble with infection data for Italy
+#'
+#' @examples
+#' scrape_wikipedia_it()
 scrape_wikipedia_it<-function(wikipedia_url = WIKIPEDIA_URL_IT){
 
   if(!dir.exists("figures")){
@@ -120,7 +142,19 @@ scrape_wikipedia_it<-function(wikipedia_url = WIKIPEDIA_URL_IT){
 
 }
 
-plot_compare_at_it<-function(){
+
+
+#' Compares Austrian and Italian infection data
+#'
+#' The function creates a plot comparing Austrian and Italian infection data.
+#' It saves the plot to COMPARISON_AT_IT_FILENAME
+#'
+#' @param days_shift How many days the Austrian data is shifted
+#' @return
+#'
+#' @examples
+#' plot_compare_at_it()
+plot_compare_at_it<-function(days_shift = 8){
 
 
   wiki_at <- covid19at::scrape_wikipedia_at()[[1]]
@@ -128,9 +162,9 @@ plot_compare_at_it<-function(){
 
   wiki_at <- wiki_at %>%
     mutate(Infektionen = `Infektionen kumuliert` / INHABITANTS_AUSTRIA) %>%
-    mutate(Country = "Österreich \n (8 Tage nach vorne versetzt)") %>%
+    mutate(Country = paste0("Österreich \n (", days_shift, "8 Tage nach vorne versetzt)")) %>%
     dplyr::select(Datum, Country, Infektionen) %>%
-    mutate(Datum = Datum - 24*3600*8)
+    mutate(Datum = Datum - 24*3600*days_shift)
 
   wiki_it <- wiki_it %>%
     mutate(Infektionen = Infektionen / INHABITANTS_ITALY) %>%
@@ -146,7 +180,7 @@ plot_compare_at_it<-function(){
     scale_color_manual(values = COLORS[c(1,6)]) +
     ylab("Infektionen (% Gesamtpopulation)")
 
-  ggsave("figures/vergleich_at_it.png",
+  ggsave(COMPARISON_AT_IT_FILENAME,
          p,
          width = 10,
          height = 5)
@@ -156,14 +190,28 @@ plot_compare_at_it<-function(){
 }
 
 
-
+#' Get date of last available data point in db
+#'
+#'
+#' @param wikipedia_table Data to be checked
+#' @return The date of the last data point
+#'
+#' @examples
+#' get_last_date(scrape_wikipedia_at()[[1]])
 get_last_date<-function(wikipedia_table){
 
   return(wikipedia_table$Datum[nrow(wikipedia_table)])
 
 }
 
-
+#' Get date of first available data point in db
+#'
+#'
+#' @param wikipedia_table Data to be checked
+#' @return The date of the first data point
+#'
+#' @examples
+#' get_first_date(scrape_wikipedia_at()[[1]])
 get_first_date<-function(wikipedia_table){
 
   return(wikipedia_table$Datum[1])
@@ -173,7 +221,18 @@ get_first_date<-function(wikipedia_table){
 
 
 
-plot_overview<-function(wikipedia_table){
+
+#' Plots an overview of Austrian infection data
+#'
+#' Plots figures and saves it to OVERVIEW_FILENAME
+#'
+#'
+#' @param wikipedia_table Austrian infection data to be used
+#' @return
+#'
+#' @examples
+#' plot_overiew_at(scrape_wikipedia_at()[[1]])
+plot_overview_at<-function(wikipedia_table){
   #### plot overview data
   p <- wikipedia_table %>%
     gather(Variable, Value, -Datum) %>%
@@ -188,7 +247,7 @@ plot_overview<-function(wikipedia_table){
     ylab("Wert (Individuen)") +
     labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(wikipedia_table)))
 
-  ggsave("figures/covid19_infektionen.png",
+  ggsave(OVERVIEW_FILENAME,
          p,
          width = 10,
          height = 5)
@@ -197,19 +256,29 @@ plot_overview<-function(wikipedia_table){
 
 }
 
-
+#' Fits a generic linear model to input data and projects future infections from the model
+#'
+#' The function fits a generic linear model between Datum and Infektionen_trans.
+#' It allows to reduce the number of input data points
+#'
+#' @param wikipedia_table_in Table to be fitted. Has to contain columns Datum and Infektionen_trans
+#' @param minus_n How many days should be removed from dataset (starting from the latest date)
+#' @param week_ahead Period for which should be predicted. Has to be a vector of POSIXct dates.
+#' @param model_name A string indicating the name of the model
+#' @return A data.frame with Dates,
+#'
 generic_mod<-function(wikipedia_table_in,
               minus_n,
               week_ahead,
-              type){
+              model_name){
 
-  wikipedia_table_short<-wikipedia_table_in[1:(nrow(wikipedia_table_in)-minus_n),]
+  wikipedia_table_short<-wikipedia_table_in[1:(nrow(wikipedia_table_in) - minus_n),]
   mod<-lm(Infektionen_trans ~ Datum, data = wikipedia_table_short)
 
   predictions<-predict(mod, week_ahead)
 
   df<-data.frame(Datum = week_ahead,
-                 fitted = predictions, Type = type)
+                 fitted = predictions, Model_Name = model_name)
 
 
   return(df)
@@ -217,13 +286,36 @@ generic_mod<-function(wikipedia_table_in,
 }
 
 
-#### plot prediction
+
+INFECTED_TEST_RATIO_FILENAME
+NMB_TESTS_FILENAME
+
+
+#' Creates a plot showing a model fit to the data. The model can be chosen arbitrarily
+#'
+#' The function fits a generic linear model between Datum and Infektionen
+#' Before fitting, Infektionen are transformed according to the given transformation functions.
+#' The model is fitted for different amounts of data points.
+#' The models are plotted together with data points and the resulting plot is saved to MODEL_FILENAME
+#'
+#' @param wikipedia_table Data to be fitted. Has to contain columns Datum and Infektionen
+#' @param final_date Up to which date should be predicted (POSIXct date)
+#' @param steps How many models should be fitted by reducing the amount of data points.
+#'              I.e. 3 indicates that one model with all data points, one model with all
+#'              data points minus the last one and one model with all data points minus
+#'              the two last ones is fitted.
+#' @param transformation_f Function that transforms input data
+#' @param transformation_f_inverse Inverse of trnasformation_f. This function indicates the kind of model. I.e. if using exp here, we estimate an exponential model.
+#' @return
+#'
+#' @example
+#' plot_prediction(scrape_wikipedia_at()[[1]], Sys.Date() + 3, 3)
+#'
 plot_prediction<-function(wikipedia_table,
                           final_date,
                           steps = 3,
                           transformation_f = log,
                           transformation_f_inverse = exp){
-
 
 
   wikipedia_table_transform <- wikipedia_table %>%
@@ -245,15 +337,15 @@ plot_prediction<-function(wikipedia_table,
 
   forecast<-bind_cols(data.frame(Datum = wikipedia_table_transform$Datum,
                                  Infektionen_trans = (wikipedia_table_transform$Infektionen_trans)),
-          data.frame(fitted=rep(NA, nrow(wikipedia_table_transform)), Type = "M")) %>%
+          data.frame(fitted=rep(NA, nrow(wikipedia_table_transform)), Model_Name = "M")) %>%
           bind_rows(res) %>%
         mutate(Infektionen = transformation_f_inverse(Infektionen_trans),
          Prediction = transformation_f_inverse(fitted)) %>%
-    dplyr::select(Datum, Infektionen, Prediction, Type) %>%
-    gather(Variable, Value, -Datum, -Type)
+    dplyr::select(Datum, Infektionen, Prediction, Model_Name) %>%
+    gather(Variable, Value, -Datum, -Model_Name)
 
   prediction_week_ahead <- forecast %>%
-    filter(Variable == "Prediction" & Type == "M1") %>%
+    filter(Variable == "Prediction" & Model_Name == "M1") %>%
     dplyr::select(Value) %>%
     tail(1) %>%
     unlist()
@@ -264,7 +356,7 @@ plot_prediction<-function(wikipedia_table,
   p <- forecast %>%
     ggplot(aes(x = Datum, y = Value)) +
     geom_point() +
-    geom_line(aes(col = Type, linetype = Variable), size = 1.1) +
+    geom_line(aes(col = Model_Name, linetype = Variable), size = 1.1) +
     scale_color_manual(values = COLORS[c(1, 3, 6, 10)]) +
     ylab("Infektionen (Faelle)") +
     labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:",
@@ -272,7 +364,7 @@ plot_prediction<-function(wikipedia_table,
                        "\nVorhersage Infektionen am ", final_date," (exponentielles Modell M1): ",
                        round(prediction_week_ahead)))
 
-  ggsave("figures/covid19_predictions.png",
+  ggsave(MODEL_FILENAME,
          p,
          width = 10,
          height = 5)
@@ -281,9 +373,18 @@ plot_prediction<-function(wikipedia_table,
 }
 
 
-#### plot test statistics
+#' Plots timeseries of the infected:number of tests ratio.
+#'
+#' Plots figures and saves it to INFECTED_TEST_RATIO_FILENAME
+#'
+#'
+#' @param wikipedia_table Austrian infection data to be used
+#' @return
+#'
+#' @examples
+#' plot_infected_tests_ratio(scrape_wikipedia_at()[[1]])
 
-plot_test_statistics<-function(wikipedia_table){
+plot_infected_tests_ratio<-function(wikipedia_table){
 
   first_value_testungen <- wikipedia_table$`Testungen kumuliert`[1]
 
@@ -299,7 +400,7 @@ plot_test_statistics<-function(wikipedia_table){
     labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(wikipedia_table)))
 
 
-  ggsave("figures/covid19_testungen.png",
+  ggsave(INFECTED_TEST_RATIO_FILENAME,
          p,
          width = 10,
          height = 5)
@@ -308,7 +409,18 @@ plot_test_statistics<-function(wikipedia_table){
 
 }
 
-#### plot number of tests
+
+
+#' Plots timeseries of number of tests
+#'
+#' Plots figures and saves it to NMB_TESTS_FILENAME
+#'
+#'
+#' @param wikipedia_table Austrian infection data to be used
+#' @return
+#'
+#' @examples
+#' plot_number_tests(scrape_wikipedia_at()[[1]])
 
 plot_number_tests<-function(wikipedia_table){
 
@@ -323,7 +435,7 @@ plot_number_tests<-function(wikipedia_table){
     ylab("Testungen") +
     labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(wikipedia_table)))
 
-  ggsave("figures/covid19_testungen_absolut.png",
+  ggsave(NMB_TESTS_FILENAME,
          p,
          width = 10,
          height = 5)
@@ -361,27 +473,27 @@ tweet_results <- function(wikipedia_table_conv, wikipedia_table_conv_old, tweet_
 
 
     tweet1<-updateStatus(text = "#COVID_19 Vorhersage mit exponentiellem Modell: M1: alle Datenpunkte, M2: alle Datenpunkte bis gestern. M3: alle Datenpunkte bis vorgestern.",
-                       mediaPath = "figures/covid19_predictions.png"
+                       mediaPath = MODEL_FILENAME
                         )
 
     tweet2<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Vergleich Infektionen Italien und Österreich (8 Tage nach vorne versetzt): ",
-                         mediaPath = "figures/vergleich_at_it.png",
+                         mediaPath = COMPARISON_AT_IT_FILENAME,
                          inReplyTo=tweet1$id
     )
 
 
     tweet3<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Neuinfektionen: ",
-                         mediaPath = "figures/covid19_infektionen.png",
+                         mediaPath = VERVIEW_FILENAME,
                          inReplyTo=tweet2$id
     )
 
     tweet4<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Verhaeltnis Infektionen:Tests ",
-                     mediaPath = "figures/covid19_testungen.png",
+                     mediaPath = INFECTED_TEST_RATIO_FILENAME,
                      inReplyTo=tweet3$id)
 
 
     tweet5<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Gesamtanzahl Tests",
-                     mediaPath = "figures/covid19_testungen_absolut.png",
+                     mediaPath = NMB_TESTS_FILENAME,
                      inReplyTo=tweet4$id)
 
     tweet6<-updateStatus(text = "#COVID_19 #R-Stats Code for analysis of Austrian infection data here: https://github.com/joph/Covid19-Austria",
