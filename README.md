@@ -31,11 +31,9 @@ plot_compare_at_it()
 
 plot_overview(wikipedia_tables_new)
 
-plot_test_statistics(wikipedia_tables_new)
+plot_infected_tests_ratio(wikipedia_tables_new)
 
 plot_number_tests(wikipedia_tables_new)
-
-
 
 </code></pre>
 

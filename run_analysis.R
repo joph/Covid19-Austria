@@ -13,8 +13,8 @@ theme_set(theme_classic(base_size = 14))
 plot_overview_at(wikipedia_tables_new)
 
 plot_prediction(wikipedia_tables_new,
-                Sys.Date() + 3,
-                3,
+                Sys.Date() + 4,
+                4,
                 log,
                 exp)
 
@@ -24,7 +24,7 @@ plot_number_tests(wikipedia_tables_new)
 
 plot_compare_at_it()
 
-tweet_resultss(wikipedia_tables_new,
-                     wikipedia_tables_old)
+tweet_results(wikipedia_tables_new,
+                     wikipedia_tables_old, TRUE)
 
 

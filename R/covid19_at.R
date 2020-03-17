@@ -357,7 +357,7 @@ plot_prediction<-function(wikipedia_table,
     ggplot(aes(x = Datum, y = Value)) +
     geom_point() +
     geom_line(aes(col = Model_Name, linetype = Variable), size = 1.1) +
-    scale_color_manual(values = COLORS[c(1, 3, 6, 10)]) +
+    scale_color_manual(values = COLORS[c(1, 3, 5, 6, 8, 10)]) +
     ylab("Infektionen (Faelle)") +
     labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:",
                          get_last_date(wikipedia_table),
@@ -483,7 +483,7 @@ tweet_results <- function(wikipedia_table_conv, wikipedia_table_conv_old, tweet_
 
 
     tweet3<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Neuinfektionen: ",
-                         mediaPath = VERVIEW_FILENAME,
+                         mediaPath = OVERVIEW_FILENAME,
                          inReplyTo=tweet2$id
     )
 
