@@ -521,7 +521,7 @@ plot_number_tests<-function(wikipedia_table){
     ggplot(aes(x = Datum, `Testungen`)) +
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1], size = 1) +
-    ylab("Testungen") +
+    ylab("Anzahl Tests") +
     labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(wikipedia_table)))
 
   ggsave(NMB_TESTS_FILENAME,
