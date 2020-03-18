@@ -10,26 +10,26 @@ it<-scrape_wikipedia_it()
 wikipedia_tables_new <- wikipedia_tables[[1]]
 wikipedia_tables_old <- wikipedia_tables[[2]]
 
-wikipedia_tables_new <-wikipedia_tables_new %>%
-  bind_rows(tibble(Datum = c(as.POSIXct("2020-03-18 08:00:00 ")),
-                                          NOE = c(0),
-                                          W = c(0),
-                                          St = c(0),
-                                          `T` = c(0),
-                                          `O?` = c(0),
-                                          S = c(0),
-                                          B = c(0),
-                                          V = c(0),
-                                          K = c(0),
-                                          `Infektionen kumuliert` = c(1471),
-                                          `Genesen kumuliert` = c(9),
-                                          `Aktuell Infizierte` = c(1471-9-3),
-                                          `Todesf?lle kumuliert` = c(3),
-                                          Neuinfektionen = c(1471-1332),
-                                          `Testungen kumuliert` = c(11977),
-                                          Zuwachs = c(0)
+#wikipedia_tables_new <-wikipedia_tables_new %>%
+#  bind_rows(tibble(Datum = c(as.POSIXct("2020-03-18 08:00:00 ")),
+#                                          NOE = c(0),
+#                                          W = c(0),
+#                                          St = c(0),
+#                                          `T` = c(0),
+#                                          `O?` = c(0),
+#                                          S = c(0),
+#                                          B = c(0),
+#                                          V = c(0),
+#                                          K = c(0),
+#                                          `Infektionen kumuliert` = c(1471),
+#                                          `Genesen kumuliert` = c(9),
+#                                          `Aktuell Infizierte` = c(1471-9-3),
+#                                          `Todesf?lle kumuliert` = c(3),
+#                                          Neuinfektionen = c(1471-1332),
+#                                          `Testungen kumuliert` = c(11977),
+#                                          Zuwachs = c(0)
 
-                                          ))
+#                                          ))
 
 
 
@@ -39,24 +39,29 @@ plot_overview_at(wikipedia_tables_new)
 
 
 s<-function(x){
-  return(x^(1/14))
+  return(x^(1/11))
 }
 
 p<-function(x){
-  return(x^14)
+  return(x^11)
 }
 
 plot_prediction(wikipedia_tables_new,
-                Sys.Date() + 3,
+                Sys.Date() + 4,
                 3,
                 s,
-                p)
+                p,
+                " (polynomielles Modell M1): ")
 
 plot_prediction(wikipedia_tables_new,
-                Sys.Date() + 3,
-                3,
+                Sys.Date() + 4,
+                2,
                 log,
-                exp)
+                exp,
+                " (exponentielles Modell M0): ")
+
+plot_prediction_combined(wikipedia_tables_new,
+                         Sys.Date() + 4)
 
 plot_infected_tests_ratio(wikipedia_tables_new)
 

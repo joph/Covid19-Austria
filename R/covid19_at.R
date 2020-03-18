@@ -22,6 +22,7 @@ COMPARISON_AT_IT_FILENAME <- "figures/vergleich_at_it.png"
 INFECTED_TEST_RATIO_FILENAME <- "figures/covid19_infektionen_tests_ratio.png"
 NMB_TESTS_FILENAME <- "figures/covid19_anzahl_tests.png"
 COUNTRY_COMPARISON_FILENAME<-"figures/covid19_vergleich_laender.png"
+PREDICTIONS_FILENAME<-"figures/cvoid19_predictions_comparison.png"
 
 ### source eurostat
 INHABITANTS_ITALY <- 60.48*10^6
@@ -148,8 +149,13 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
                                 "Aktuell Infizierte",
                                 "Todesf?lle kumuliert",
                                 "Neuinfektionen",
-                                "Testungen kumuliert",
                                 "Zuwachs")
+
+
+  wikipedia_table_1 <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[3]]
+
+  wikipedia_table_clean$`Testungen kumuliert`<-tibble(t=(c((wikipedia_table_1$`Testungen aufsummiert`))))$t
+
 
   wikipedia_table_clean <- wikipedia_table_clean %>%
     mutate(Datum = str_replace(Datum, "[\\(]","")) %>%
@@ -376,9 +382,92 @@ generic_mod<-function(wikipedia_table_in,
 
 
 
-INFECTED_TEST_RATIO_FILENAME
-NMB_TESTS_FILENAME
+plot_prediction_combined<-function(db_at,
+                                   final_date){
 
+  week_ahead <- data.frame(Datum = c(db_at$Datum,
+                                     seq(as.POSIXct(get_last_date(db_at) + 3600*24),
+                                         as.POSIXct(final_date) + 3600 * 16,
+                                         3600*24)))
+
+  base_data <- db_at %>%
+    dplyr::select(Datum,
+                  fitted = `Infektionen kumuliert`
+                  ) %>%
+    mutate(Model_Name = "Beobachtungen",
+           Size = 2)
+
+  db_at_exp <- db_at %>%
+    mutate(Infektionen_trans = log(`Infektionen kumuliert`))
+
+  db_at_poly <- db_at %>%
+    mutate(Infektionen_trans = (`Infektionen kumuliert`)^(1/11))
+
+  it<-scrape_wikipedia_it() %>%
+    mutate(Datum = Datum + 8*3600*24) %>%
+    mutate(fitted = `Infektionen (kumuliert)` * INHABITANTS_AUSTRIA / INHABITANTS_ITALY) %>%
+    mutate(Model_Name = "Italien \n(8 Tage nach hinten versetzt)",
+           Size = 1) %>%
+    dplyr::select(Datum,
+                  fitted,
+                  Model_Name,
+                  Size)
+
+
+
+  results <- generic_mod(db_at_exp,
+                         0,
+                         week_ahead,
+                         "Exponentielles Modell") %>%
+    mutate(fitted = exp(fitted),
+           Size = 1) %>%
+    bind_rows(generic_mod(
+      db_at_poly,
+      0,
+      week_ahead,
+      "Polynomielles Modell"
+    ) %>%
+      mutate(fitted = fitted^11,
+             Size = 1)) %>%
+    bind_rows(it) %>%
+    bind_rows(base_data)
+
+  results$Model_Name <- factor(results$Model_Name)
+
+  results$Model_Name <- factor(results$Model_Name, levels = rev(levels(results$Model_Name)))
+
+  estimates_ahead <- results %>% group_by(Model_Name) %>%
+    summarize(res = max(fitted))
+
+  estimate_italy <- results %>%
+    filter(Model_Name == "Italien \n(8 Tage nach hinten versetzt)") %>%
+    dplyr::select(fitted) %>% unlist()
+  estimate_italy <- estimate_italy[nrow(it)-4]
+
+  p <- results %>%
+         ggplot(aes(x = Datum, y = fitted)) +
+         geom_line(aes(col = Model_Name), size = 1) +
+         geom_point(aes(col = Model_Name), size = 2) +
+         scale_color_manual(values = COLORS) +
+         ylab("Anzahl Infektionen") +
+    labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:",
+                         get_last_date(db_at),
+                         "\nVorhersage Infektionen am ", final_date, "Polynomielles Modell: ",
+                         round(estimates_ahead$res[1]),
+                         "\nItalien (8 Tage nach hinten versetzt): ",
+                         round(estimate_italy),
+                         "\nExponentielles Modell: ",
+                         round(estimates_ahead$res[3])
+                         ))
+
+  ggsave(PREDICTIONS_FILENAME, p)
+
+  p
+
+
+
+
+}
 
 #' Creates a plot showing a model fit to the data. The model can be chosen arbitrarily
 #'
@@ -404,7 +493,8 @@ plot_prediction<-function(wikipedia_table,
                           final_date,
                           steps = 3,
                           transformation_f = log,
-                          transformation_f_inverse = exp){
+                          transformation_f_inverse = exp,
+                          add_string =  " (exponentielles Modell M1): "){
 
 
   wikipedia_table_transform <- wikipedia_table %>%
@@ -417,9 +507,9 @@ plot_prediction<-function(wikipedia_table,
 
   results <- mapply(generic_mod,
          list(wikipedia_table_transform),
-         1:steps,
+         0:steps,
          list(week_ahead),
-         paste0("M",1:steps),
+         paste0("M",0:steps),
          SIMPLIFY = FALSE)
 
   res<-bind_rows(results)
@@ -434,7 +524,7 @@ plot_prediction<-function(wikipedia_table,
     gather(Variable, Value, -Datum, -Model_Name)
 
   prediction_week_ahead <- forecast %>%
-    filter(Variable == "Prediction" & Model_Name == "M1") %>%
+    filter(Variable == "Prediction" & Model_Name == "M0") %>%
     dplyr::select(Value) %>%
     tail(1) %>%
     unlist()
@@ -446,11 +536,11 @@ plot_prediction<-function(wikipedia_table,
     ggplot(aes(x = Datum, y = Value)) +
     geom_point() +
     geom_line(aes(col = Model_Name, linetype = Variable), size = 1.1) +
-    scale_color_manual(values = COLORS[c(1, 3, 5, 6, 8, 10)]) +
+    scale_color_manual(values = COLORS) +
     ylab("Infektionen (Faelle)") +
     labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:",
                          get_last_date(wikipedia_table),
-                       "\nVorhersage Infektionen am ", final_date," (exponentielles Modell M1): ",
+                       "\nVorhersage Infektionen am ", final_date, add_string,
                        round(prediction_week_ahead)))
 
   ggsave(MODEL_FILENAME,
@@ -561,7 +651,7 @@ tweet_results <- function(wikipedia_table_conv, wikipedia_table_conv_old, tweet_
                     access_secret = authentification$access_secret[1])
 
 
-    tweet1<-updateStatus(text = "#COVID_19 Vorhersage mit exponentiellem Modell: M1: alle Datenpunkte, M2: alle Datenpunkte bis gestern. M3: alle Datenpunkte bis vorgestern.",
+    tweet1<-updateStatus(text = "#COVID_19 Vorhersage mit exponentiellem Modell: M0: alle Datenpunkte, M1: alle Datenpunkte bis gestern. M2: alle Datenpunkte bis vorgestern.",
                        mediaPath = MODEL_FILENAME
                         )
 
