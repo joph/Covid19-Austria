@@ -21,6 +21,7 @@ MODEL_FILENAME <- "figures/covid19_predictions.png"
 COMPARISON_AT_IT_FILENAME <- "figures/vergleich_at_it.png"
 INFECTED_TEST_RATIO_FILENAME <- "figures/covid19_infektionen_tests_ratio.png"
 NMB_TESTS_FILENAME <- "figures/covid19_anzahl_tests.png"
+COUNTRY_COMPARISON_FILENAME<-"figures/covid19_vergleich_laender.png"
 
 ### source eurostat
 INHABITANTS_ITALY <- 60.48*10^6
@@ -28,6 +29,91 @@ INHABITANTS_ITALY <- 60.48*10^6
 ### source eurostat
 INHABITANTS_AUSTRIA <- 8.82*10^6
 
+download_international_cases<-function(){
+
+  confirmed<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv"
+  dead<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv"
+  recovered<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv"
+
+  download.file(confirmed,
+                "data/global_confirmed.csv")
+
+  download.file(dead,
+                "data/global_dead.csv")
+
+  download.file(recovered,
+                "data/global_recovered.csv")
+
+  c<-read_csv("data/global_confirmed.csv") %>%
+    gather(Date,
+           Cases,
+           -`Province/State`,
+           -`Country/Region`,
+           -Lat,
+           -Long) %>%
+    mutate(Type = "Infected")
+
+  d<-read_csv("data/global_dead.csv") %>%
+    gather(Date,
+           Cases,
+           -`Province/State`,
+           -`Country/Region`,
+           -Lat,
+           -Long) %>%
+    mutate(Type = "Dead")
+
+  r<-read_csv("data/global_recovered.csv") %>%
+    gather(Date,
+           Cases,
+           -`Province/State`,
+           -`Country/Region`,
+           -Lat,
+           -Long) %>%
+    mutate(Type = "Recovered")
+
+  all_data <- bind_rows(c, d, r) %>%
+    mutate(`Province/State` = ifelse(is.na(`Province/State`), "", `Province/State`)) %>%
+    mutate(Date = mdy(Date)) %>%
+    mutate(Region = paste(`Country/Region`)) %>%
+    group_by(Region, Date, Type) %>%
+    summarize(Cases = sum(Cases)) %>%
+    dplyr::select(Region, Date, Type, Cases) %>%
+    ungroup() %>%
+    mutate(Region = ifelse(Region == "US", "United States", Region))
+
+  population<-wb(indicator = "SP.POP.TOTL") %>%
+    filter(date == 2018) %>%
+    dplyr::select(country,
+                  value)
+
+  all_data<-full_join(all_data,
+            population,
+            by=c("Region" = "country")) %>%
+    na.omit() %>%
+    mutate(Population = value) %>%
+    dplyr::select(-value) %>%
+    mutate(Cases_proportional = Cases/Population)
+
+    return(all_data)
+}
+
+country_comparison<-function(db,
+                             countries){
+
+  p <- db %>%
+    filter(Region %in% countries) %>%
+    filter(Type == "Infected") %>%
+    ggplot(aes(x = Date, y = Cases_proportional * 100)) +
+    geom_line(aes(col = Region), size = 1) +
+    ylab("Infektionen (% der Bevölkerung)") +
+    scale_color_manual(values = COLORS)
+
+  ggsave(COUNTRY_COMPARISON_FILENAME,
+         p)
+
+  p
+
+}
 
 #' Download, clean and save data on infections in Austria from wikipedia
 #'
@@ -172,6 +258,9 @@ plot_compare_at_it<-function(days_shift = 8){
     dplyr::select(Datum, Country, Infektionen)
 
   #wiki_it <- wiki_it[-1,]
+
+  merged <- bind_rows(wiki_at,
+                      wiki_it)
 
   p<-merged %>%
     ggplot(aes(x = Datum, y = Infektionen * 100)) +
@@ -496,8 +585,13 @@ tweet_results <- function(wikipedia_table_conv, wikipedia_table_conv_old, tweet_
                      mediaPath = NMB_TESTS_FILENAME,
                      inReplyTo=tweet4$id)
 
-    tweet6<-updateStatus(text = "#COVID_19 #R-Stats Code for analysis of Austrian infection data here: https://github.com/joph/Covid19-Austria",
+    tweet6<-updateStatus(text = "#COVID_19 Data Update. Vergleich Laender.",
+                         mediaPath = COUNTRY_COMPARISON_FILENAME,
                          inReplyTo=tweet5$id)
+
+
+    tweet7<-updateStatus(text = "#COVID_19 #R-Stats Code for analysis of Austrian infection data here: https://github.com/joph/Covid19-Austria",
+                         inReplyTo=tweet6$id)
 
 
 

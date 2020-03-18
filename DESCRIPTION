@@ -19,5 +19,8 @@ Imports:
     rvest,
     twitteR,
     moderndive,
-    stringr
+    stringr,
+    lubridate,
+    wbstats,
+    readr
 RoxygenNote: 7.0.2
