@@ -42,7 +42,7 @@ plot_compare_at_it()
 
 international_cases<-download_international_cases()
 
-country_comparison(international_cases,
+plot_country_comparison(international_cases,
                    c("Austria",
                      "China",
                      "United States",

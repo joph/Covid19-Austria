@@ -97,7 +97,7 @@ download_international_cases<-function(){
     return(all_data)
 }
 
-country_comparison<-function(db,
+plot_country_comparison<-function(db,
                              countries){
 
   p <- db %>%
@@ -585,7 +585,7 @@ tweet_results <- function(wikipedia_table_conv, wikipedia_table_conv_old, tweet_
                      mediaPath = NMB_TESTS_FILENAME,
                      inReplyTo=tweet4$id)
 
-    tweet6<-updateStatus(text = "#COVID_19 Data Update. Vergleich Laender.",
+    tweet6<-updateStatus(text = "#COVID_19 Data Update. Vergleich Laender. Datenpunkte bis zum Vortag.",
                          mediaPath = COUNTRY_COMPARISON_FILENAME,
                          inReplyTo=tweet5$id)
 
