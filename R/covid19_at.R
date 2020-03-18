@@ -248,7 +248,7 @@ plot_compare_at_it<-function(days_shift = 8){
 
   wiki_at <- wiki_at %>%
     mutate(Infektionen = `Infektionen kumuliert` / INHABITANTS_AUSTRIA) %>%
-    mutate(Country = paste0("Österreich \n (", days_shift, "8 Tage nach vorne versetzt)")) %>%
+    mutate(Country = paste0("Österreich \n (", days_shift, " Tage nach vorne versetzt)")) %>%
     dplyr::select(Datum, Country, Infektionen) %>%
     mutate(Datum = Datum - 24*3600*days_shift)
 
