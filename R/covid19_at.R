@@ -194,6 +194,53 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 
 }
 
+get_wikidata_at<-function(){
+
+  endpoint <- "https://query.wikidata.org/sparql"
+  query <- 'SELECT ?numberOfCases ?numberOfDeaths ?numberOfTests ?pointInTime WHERE {\n
+    wd:Q86847911 p:P1114 ?numberOfStmt;\n
+    p:P1603 ?numberOfCasesStmt;\n
+    p:P1120 ?numberOfDeathsStmt. \n
+    ?numberOfStmt ps:P1114 ?numberOfTests;\n
+    pq:P805 wd:Q86901049;\n
+    pq:P585 ?pointInTime.\n
+    ?numberOfCasesStmt ps:P1603 ?numberOfCases;\n
+    pq:P585 ?pointInTime.\n
+    ?numberOfDeathsStmt ps:P1120 ?numberOfDeaths;\n
+    pq:P585 ?pointInTime.  \n
+  }\n
+  ORDER BY (?pointInTime)'
+
+  useragent <- paste("WDQS-Example", R.version.string) # TODO adjust this; see https://w.wiki/CX6
+
+  qd <- SPARQL(endpoint,
+               query,
+               curl_args=list(useragent=useragent))
+  df <- qd$results
+
+  db_at <- df %>%
+    mutate(Datum = as.POSIXct(pointInTime, origin = as.POSIXct("1970-01-01 00:00:00"))) %>%
+    mutate(`Infektionen kumuliert` = numberOfCases) %>%
+    mutate(`Toesf?lle kumuliert` = numberOfDeaths) %>%
+    mutate(`Testungen kumuliert` = numberOfTests) %>%
+    mutate(`Infektionen kumuliert` = numberOfCases) %>%
+    mutate(`Genesen kumuliert` = NA) %>%
+    mutate(`Aktuell Infizierte` = NA)
+
+  db_at_old <- NULL
+
+  if(file.exists("data/data.feather")){
+    db_at_old <- feather("data/data.feather")
+  }
+
+  write_feather(db_at, "data/data.feather")
+
+
+  return(list(db_at,
+              db_at_old))
+
+}
+
 #' Download, clean and save data on infections in Italy from wikipedia
 #'
 #' @param url Url to the wikipedia page. Is preconfigured and may only be changed if wikipedia URL changed.

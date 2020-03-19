@@ -4,6 +4,7 @@ library(tidyverse)
 
 wikipedia_tables <- covid19at::scrape_wikipedia_at()
 
+wikidata_tables<-get_wikidata_at()
 
 it<-scrape_wikipedia_it()
 

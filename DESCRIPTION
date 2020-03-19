@@ -22,5 +22,6 @@ Imports:
     stringr,
     lubridate,
     wbstats,
-    readr
+    readr,
+    SPARQL
 RoxygenNote: 7.0.2
