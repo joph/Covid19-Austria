@@ -22,7 +22,9 @@ COMPARISON_AT_IT_FILENAME <- "figures/vergleich_at_it.png"
 INFECTED_TEST_RATIO_FILENAME <- "figures/covid19_infektionen_tests_ratio.png"
 NMB_TESTS_FILENAME <- "figures/covid19_anzahl_tests.png"
 COUNTRY_COMPARISON_FILENAME<-"figures/covid19_vergleich_laender.png"
-PREDICTIONS_FILENAME<-"figures/cvoid19_predictions_comparison.png"
+PREDICTIONS_FILENAME<-"figures/covid19_predictions_comparison.png"
+GROWTH_RATE_FILENAME<-"figures/covid19_growth_rate.png"
+DOUBLING_FILENAME<-"figures/covid19_doubling.png"
 
 ### source eurostat
 INHABITANTS_ITALY <- 60.48*10^6
@@ -98,16 +100,24 @@ download_international_cases<-function(){
     return(all_data)
 }
 
-plot_country_comparison<-function(db,
+plot_country_comparison<-function(db_,
                              countries){
 
-  p <- db %>%
+  max_date <- db_ %>%
+    filter(Region %in% countries) %>%
+    filter(Type == "Infected") %>%
+    summarize(Max_Date = max(Date)) %>%
+    unlist()
+
+  p <- db_ %>%
     filter(Region %in% countries) %>%
     filter(Type == "Infected") %>%
     ggplot(aes(x = Date, y = Cases_proportional * 100)) +
     geom_line(aes(col = Region), size = 1) +
-    ylab("Infektionen (% der Bevölkerung)") +
-    scale_color_manual(values = COLORS)
+    ylab("Positiv getestete Infektionen (% der Bevölkerung)") +
+    scale_color_manual(values = COLORS) +
+    labs(caption = paste("Quelle: https://raw.githubusercontent.com/CSSEGISandData/COVID-19/", ""))
+
 
   ggsave(COUNTRY_COMPARISON_FILENAME,
          p)
@@ -238,6 +248,77 @@ get_wikidata_at<-function(){
 
   return(list(db_at,
               db_at_old))
+
+}
+
+plot_growth_data<-function(db_at){
+
+  growth<-db_at %>%
+    # first sort by year
+    arrange(Datum) %>%
+    mutate(selector = ((n()-1):0)%%5) %>%
+    filter(selector == 0) %>%
+    mutate(Diff_datum = as.numeric(Datum - lag(Datum)),  # Difference in time (just in case there are gaps)
+           Diff_growth = `Infektionen kumuliert` - lag(`Infektionen kumuliert`),
+           Lag_infektionen = lag(`Infektionen kumuliert`),
+           Rate_percent = 100 * ((Diff_growth /Lag_infektionen)^(1/Diff_datum) - 1)) %>%
+    dplyr::select(Datum,
+                  Diff_datum,
+                  Diff_growth,
+                  Rate_percent,
+                  Lag_infektionen) %>%
+    mutate(Verdopplung = 70 /(Rate_percent))
+
+  p <- growth %>%
+    ggplot(aes(x = Datum, y = Rate_percent)) +
+    geom_bar(stat = "identity", fill = COLORS[1]) +
+    ylab("4 Tages-Wachstumsrate der Infektionen (%)") +
+    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db_at)))
+
+
+
+
+  ggsave(GROWTH_RATE_FILENAME,
+         p,
+         width = 10,
+         height = 5)
+  p
+
+}
+
+plot_doubling_time<-function(db_at){
+
+
+growth<-db_at %>%
+  # first sort by year
+  arrange(Datum) %>%
+  mutate(selector = ((n()-1):0)%%5) %>%
+  filter(selector == 0) %>%
+  mutate(Diff_datum = as.numeric(Datum - lag(Datum)),  # Difference in time (just in case there are gaps)
+         Diff_growth = `Infektionen kumuliert` - lag(`Infektionen kumuliert`),
+         Lag_infektionen = lag(`Infektionen kumuliert`),
+         Rate_percent = 100 * ((Diff_growth /Lag_infektionen)^(1/Diff_datum) - 1)) %>%
+  dplyr::select(Datum,
+                Diff_datum,
+                Diff_growth,
+                Rate_percent,
+                Lag_infektionen) %>%
+  mutate(Verdopplung = 70 /(Rate_percent))
+
+
+p<-growth %>%
+  ggplot(aes(x = Datum, y = Verdopplung)) +
+  geom_bar(stat = "identity", fill = COLORS[1]) +
+  ylab("~Verdopplungszeit (Tage)") +
+  labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db_at)))
+
+
+ggsave(DOUBLING_FILENAME,
+       p,
+       width = 10,
+       height = 5)
+
+p
 
 }
 
@@ -430,7 +511,9 @@ generic_mod<-function(wikipedia_table_in,
 
 
 plot_prediction_combined<-function(db_at,
-                                   final_date){
+                                   final_date,
+                                   polynom,
+                                   exp = TRUE){
 
   week_ahead <- data.frame(Datum = c(db_at$Datum,
                                      seq(as.POSIXct(get_last_date(db_at) + 3600*24),
@@ -448,7 +531,7 @@ plot_prediction_combined<-function(db_at,
     mutate(Infektionen_trans = log(`Infektionen kumuliert`))
 
   db_at_poly <- db_at %>%
-    mutate(Infektionen_trans = (`Infektionen kumuliert`)^(1/11))
+    mutate(Infektionen_trans = (`Infektionen kumuliert`)^(1/polynom))
 
   it<-scrape_wikipedia_it() %>%
     mutate(Datum = Datum + 8*3600*24) %>%
@@ -474,7 +557,7 @@ plot_prediction_combined<-function(db_at,
       week_ahead,
       "Polynomielles Modell"
     ) %>%
-      mutate(fitted = fitted^11,
+      mutate(fitted = fitted^polynom,
              Size = 1)) %>%
     bind_rows(it) %>%
     bind_rows(base_data)
@@ -489,14 +572,24 @@ plot_prediction_combined<-function(db_at,
   estimate_italy <- results %>%
     filter(Model_Name == "Italien \n(8 Tage nach hinten versetzt)") %>%
     dplyr::select(fitted) %>% unlist()
-  estimate_italy <- estimate_italy[nrow(it)-4]
+  estimate_italy <- estimate_italy[nrow(it) - 4]
+
+  results %>%
+    dplyr::select(-Size) %>%
+    spread(Model_Name,fitted) %>%
+      write_delim(paste0("data/prediction", Sys.Date(), ".csv"), delim=";")
+
+  if(!exp){
+    results <- results %>%
+      filter(Model_Name != "Exponentielles Modell")
+  }
 
   p <- results %>%
          ggplot(aes(x = Datum, y = fitted)) +
          geom_line(aes(col = Model_Name), size = 1) +
          geom_point(aes(col = Model_Name), size = 2) +
          scale_color_manual(values = COLORS) +
-         ylab("Anzahl Infektionen") +
+         ylab("Anzahl positiv getesteter Individuen") +
     labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:",
                          get_last_date(db_at),
                          "\nVorhersage Infektionen am ", final_date, "Polynomielles Modell: ",
@@ -507,7 +600,10 @@ plot_prediction_combined<-function(db_at,
                          round(estimates_ahead$res[3])
                          ))
 
-  ggsave(PREDICTIONS_FILENAME, p)
+  ggsave(PREDICTIONS_FILENAME,
+         p,
+         width = 10,
+         height = 5)
 
   p
 
@@ -672,7 +768,9 @@ plot_number_tests<-function(wikipedia_table){
 
 #### tweet results
 
-tweet_results <- function(wikipedia_table_conv, wikipedia_table_conv_old, tweet_always = FALSE){
+tweet_results <- function(wikipedia_table_conv,
+                          wikipedia_table_conv_old,
+                          tweet_always = FALSE){
 
   tweet<-tweet_always
 
@@ -698,8 +796,8 @@ tweet_results <- function(wikipedia_table_conv, wikipedia_table_conv_old, tweet_
                     access_secret = authentification$access_secret[1])
 
 
-    tweet1<-updateStatus(text = "#COVID_19 Vorhersage mit exponentiellem Modell: M0: alle Datenpunkte, M1: alle Datenpunkte bis gestern. M2: alle Datenpunkte bis vorgestern.",
-                       mediaPath = MODEL_FILENAME
+    tweet1<-updateStatus(text = "#COVID_19 Vorhersage mit exponentiellem, polynomiellem und Italien Modell.",
+                       mediaPath = PREDICTIONS_FILENAME
                         )
 
     tweet2<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Vergleich Infektionen Italien und Österreich (8 Tage nach vorne versetzt): ",
@@ -708,13 +806,13 @@ tweet_results <- function(wikipedia_table_conv, wikipedia_table_conv_old, tweet_
     )
 
 
-    tweet3<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Neuinfektionen: ",
-                         mediaPath = OVERVIEW_FILENAME,
+    tweet3<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Wachstumsrate: ",
+                         mediaPath = GROWTH_RATE_FILENAME,
                          inReplyTo=tweet2$id
     )
 
-    tweet4<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Verhaeltnis Infektionen:Tests ",
-                     mediaPath = INFECTED_TEST_RATIO_FILENAME,
+    tweet4<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Dauer Verdopplungen der Infektionen in Tagen:  ",
+                     mediaPath = DOUBLING_FILENAME,
                      inReplyTo=tweet3$id)
 
 
@@ -722,13 +820,18 @@ tweet_results <- function(wikipedia_table_conv, wikipedia_table_conv_old, tweet_
                      mediaPath = NMB_TESTS_FILENAME,
                      inReplyTo=tweet4$id)
 
-    tweet6<-updateStatus(text = "#COVID_19 Data Update. Vergleich Laender. Datenpunkte bis zum Vortag.",
-                         mediaPath = COUNTRY_COMPARISON_FILENAME,
+    tweet6<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Verhaeltnis Infektionen : Tests:",
+                         mediaPath = INFECTED_TEST_RATIO_FILENAME,
                          inReplyTo=tweet5$id)
 
 
-    tweet7<-updateStatus(text = "#COVID_19 #R-Stats Code for analysis of Austrian infection data here: https://github.com/joph/Covid19-Austria",
+    tweet7<-updateStatus(text = "#COVID_19 Data Update. Vergleich Laender. Datenpunkte bis zum Vortag.",
+                         mediaPath = COUNTRY_COMPARISON_FILENAME,
                          inReplyTo=tweet6$id)
+
+
+    tweet8<-updateStatus(text = "#COVID_19 #R-Stats Code for analysis of Austrian infection data here: https://github.com/joph/Covid19-Austria",
+                         inReplyTo=tweet7$id)
 
 
 
