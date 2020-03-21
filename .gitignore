@@ -42,3 +42,4 @@ vignettes/*.pdf
 authentification
 data.feather
 
+/data/*.csv
