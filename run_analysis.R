@@ -1,71 +1,62 @@
 library(covid19at)
 library(ggplot2)
 library(tidyverse)
-
-wikipedia_tables <- covid19at::scrape_wikipedia_at()
-it<-scrape_wikipedia_it()
-
-wikipedia_tables_new <- wikipedia_tables[[1]]
-wikipedia_tables_old <- wikipedia_tables[[2]]
-
-
-wikipedia_tables_new %>%
-  mutate(log_inf = log(`Infektionen kumuliert`)) %>%
-  ggplot(aes(x = Datum, y =log_inf)) +
-  geom_line() +
-  geom_abline(intercept = 0, slope = 1000) +
-  ylim(c(0,8))
-
-ggsave("figures/logplot.png")
-
-international_cases<-download_international_cases()
-
-# Difference in route between years
-
-wikipedia_tables_new <-wikipedia_tables_new %>%
-  bind_rows(tibble(Datum = c(as.POSIXct("2020-03-19 14:30:00 ")),
-                                          NOE = c(0),
-                                          W = c(0),
-                                          St = c(0),
-                                          `T` = c(0),
-                                          `O?` = c(0),
-                                          S = c(0),
-                                          B = c(0),
-                                          V = c(0),
-                                          K = c(0),
-                                          `Infektionen kumuliert` = c(2013),
-                                          `Genesen kumuliert` = c(9),
-                                          `Aktuell Infizierte` = c(2013-9-6),
-                                          `Todesf?lle kumuliert` = c(6),
-                                          Neuinfektionen = c(2013-1646),
-                                          `Testungen kumuliert` = c(13724),
-                                          Zuwachs = c(0)
-
-                                          ))
-
-
+library(twitteR)
 
 theme_set(theme_classic(base_size = 14))
 
-plot_prediction_combined(wikipedia_tables_new,
+db_at <- covid19at::scrape_wikipedia_at()
+db_international <- download_international_cases()
+
+db_at <- manual_data_entry(db_at,
+                           date = as.POSIXct("2020-03-21 08:00:00"),
+                          cases_infected_cum = 2664,
+                          cases_dead_cum = 7,
+                          cases_recovered_cum = 9,
+                          tests = 18545)
+
+plot_growth_data(db_international,
+                 "United Kingdom")
+
+
+plot_growth_data(db_at)
+
+plot_doubling_time(db_international,
+                   "United Kingdom")
+
+plot_doubling_time(db_at)
+
+plot_overview(db_international,
+              "United Kingdom")
+
+plot_overview(db_at)
+
+plot_prediction_combined(db_at,
+                         db_international,
                          Sys.Date() + 4,
-                         polynom = 9,
+                         region1 = "Austria",
+                         region2 = "Italy",
+                         delay = 8,
+                         polynom = 6,
                          exp = FALSE)
 
-plot_country_comparison(international_cases,
+plot_country_comparison(db_international,
                         c("Austria",
                           "China",
                           "United States",
+                          "United Kingdom",
                           "Italy",
-                          "Brazil"))
+                          "Brazil",
+                          "South Africa"))
 
-plot_growth_data(wikipedia_tables_new)
 
-plot_doubling_time(wikipedia_tables_new)
+plot_infected_tests_ratio(db_at)
 
-plot_infected_tests_ratio(wikipedia_tables_new)
+plot_number_tests(db_at)
 
-plot_number_tests(wikipedia_tables_new)
+plot_prediction(db_international,
+                Sys.Date() + 4,
+                region = "Italy")
 
 
 authentification <- feather("authentification")
@@ -76,27 +67,27 @@ setup_twitter_oauth(consumer_key = authentification$consumer_key[1],
                     access_secret = authentification$access_secret[1])
 
 
-tweet1<-updateStatus(text = "#COVID_19 Vorhersage mit exponentiellem, polynomiellem und Italien Modell.",
+tweet1<-updateStatus(text = "#COVID_19 Vorhersage mit polynomiellem und Italien Modell.",
                      mediaPath = PREDICTIONS_FILENAME
 )
 
 tweet2<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Wachstumsrate: ",
                      mediaPath = GROWTH_RATE_FILENAME,
-                     inReplyTo=tweet2$id
+                     inReplyTo=tweet1$id
 )
 
 tweet3<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Dauer Verdopplungen der Infektionen in Tagen:  ",
                      mediaPath = DOUBLING_FILENAME,
-                     inReplyTo=tweet3$id)
+                     inReplyTo=tweet2$id)
 
 
 tweet4<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Gesamtanzahl Tests",
                      mediaPath = NMB_TESTS_FILENAME,
-                     inReplyTo=tweet4$id)
+                     inReplyTo=tweet3$id)
 
 tweet5<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Verhaeltnis Infektionen : Tests:",
                      mediaPath = INFECTED_TEST_RATIO_FILENAME,
-                     inReplyTo=tweet5$id)
+                     inReplyTo=tweet4$id)
 
 
 tweet6<-updateStatus(text = "#COVID_19 Data Update. Vergleich Laender. Datenpunkte bis zum Vortag.",
@@ -117,6 +108,9 @@ tweet_results(wikipedia_tables_new,
 ##### testing stuff
 plot_overview_at(wikipedia_tables_new)
 
+
+it<-scrape_wikipedia_it() %>%
+  mutate(Datum = Datum + 8*3600*24)
 
 
 countries <- c("Italy",
@@ -161,4 +155,22 @@ plot_prediction(wikipedia_tables_new,
                 log,
                 exp,
                 " (exponentielles Modell M0): ")
+
+
+growth<-wikipedia_tables_new %>%
+  # first sort by year
+  arrange(Datum) %>%
+  mutate(selector = ((n()-1):0)%%5) %>%
+  filter(selector == 0) %>%
+  mutate(Diff_datum = as.numeric(Datum - lag(Datum)),  # Difference in time (just in case there are gaps)
+         Diff_growth = `Infektionen kumuliert` - lag(`Infektionen kumuliert`),
+         Lag_infektionen = lag(`Infektionen kumuliert`),
+         Rate_percent = 100 * ((`Infektionen kumuliert` /Lag_infektionen)^(1/Diff_datum) - 1))   %>%
+  dplyr::select(Datum,
+                Diff_datum,
+                Diff_growth,
+                Rate_percent,
+                Lag_infektionen,
+              `Infektionen kumuliert`)
+
 

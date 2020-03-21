@@ -12,7 +12,7 @@ COLORS <- c("#c72321",
 
 
 ### wikipedia url
-WIKIPEDIA_URL_AT <- "https://de.wikipedia.org/wiki/COVID-19-F%C3%A4lle_in_%C3%96sterreich"
+WIKIPEDIA_URL_AT <- "https://de.wikipedia.org/wiki/COVID-19-Pandemie_in_%C3%96sterreich"
 
 WIKIPEDIA_URL_IT <- "https://de.wikipedia.org/wiki/COVID-19-Epidemie_in_Italien"
 
@@ -95,7 +95,15 @@ download_international_cases<-function(){
     na.omit() %>%
     mutate(Population = value) %>%
     dplyr::select(-value) %>%
-    mutate(Cases_proportional = Cases/Population)
+    mutate(Cases_proportional = Cases/Population) %>%
+
+    mutate(Date = as.POSIXct(paste0(Date, " 00:00:00"))) %>%
+    dplyr::select(Region,
+                  Date,
+                  Population,
+                  Type,
+                  Cases,
+                  Cases_proportional)
 
     return(all_data)
 }
@@ -114,7 +122,7 @@ plot_country_comparison<-function(db_,
     filter(Type == "Infected") %>%
     ggplot(aes(x = Date, y = Cases_proportional * 100)) +
     geom_line(aes(col = Region), size = 1) +
-    ylab("Positiv getestete Infektionen (% der Bevölkerung)") +
+    ylab("Positiv getestete Individuen (% der Bevölkerung)") +
     scale_color_manual(values = COLORS) +
     labs(caption = paste("Quelle: https://raw.githubusercontent.com/CSSEGISandData/COVID-19/", ""))
 
@@ -159,7 +167,8 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
                                 "Aktuell Infizierte",
                                 "Todesf?lle kumuliert",
                                 "Neuinfektionen",
-                                "Zuwachs")
+                                "Zuwachs",
+                                "Zuwachs1")
 
 
   wikipedia_table_1 <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[3]]
@@ -190,90 +199,73 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
          as.numeric)
 
 
-  wikipedia_table_conv_old <- NULL
-
-  if(file.exists("data/data.feather")){
-    wikipedia_table_conv_old <- feather("data/data.feather")
-  }
-
-  write_feather(wikipedia_table_conv, "data/data.feather")
-
-
-  return(list(wikipedia_table_conv,
-              wikipedia_table_conv_old))
-
-}
-
-get_wikidata_at<-function(){
-
-  endpoint <- "https://query.wikidata.org/sparql"
-  query <- 'SELECT ?numberOfCases ?numberOfDeaths ?numberOfTests ?pointInTime WHERE {\n
-    wd:Q86847911 p:P1114 ?numberOfStmt;\n
-    p:P1603 ?numberOfCasesStmt;\n
-    p:P1120 ?numberOfDeathsStmt. \n
-    ?numberOfStmt ps:P1114 ?numberOfTests;\n
-    pq:P805 wd:Q86901049;\n
-    pq:P585 ?pointInTime.\n
-    ?numberOfCasesStmt ps:P1603 ?numberOfCases;\n
-    pq:P585 ?pointInTime.\n
-    ?numberOfDeathsStmt ps:P1120 ?numberOfDeaths;\n
-    pq:P585 ?pointInTime.  \n
-  }\n
-  ORDER BY (?pointInTime)'
-
-  useragent <- paste("WDQS-Example", R.version.string) # TODO adjust this; see https://w.wiki/CX6
-
-  qd <- SPARQL(endpoint,
-               query,
-               curl_args=list(useragent=useragent))
-  df <- qd$results
-
-  db_at <- df %>%
-    mutate(Datum = as.POSIXct(pointInTime, origin = as.POSIXct("1970-01-01 00:00:00"))) %>%
-    mutate(`Infektionen kumuliert` = numberOfCases) %>%
-    mutate(`Toesf?lle kumuliert` = numberOfDeaths) %>%
-    mutate(`Testungen kumuliert` = numberOfTests) %>%
-    mutate(`Infektionen kumuliert` = numberOfCases) %>%
-    mutate(`Genesen kumuliert` = NA) %>%
-    mutate(`Aktuell Infizierte` = NA)
-
-  db_at_old <- NULL
-
-  if(file.exists("data/data.feather")){
-    db_at_old <- feather("data/data.feather")
-  }
-
-  write_feather(db_at, "data/data.feather")
+  wikipedia_table_conv <- wikipedia_table_conv %>%
+    mutate(Region = "Austria") %>%
+    mutate(Population = INHABITANTS_AUSTRIA) %>%
+    dplyr::select(Region,
+                  Date = Datum,
+                  Dead = `Todesf?lle kumuliert`,
+                  Infected = `Infektionen kumuliert`,
+                  Recovered = `Genesen kumuliert`,
+                  Nmb_Tested = `Testungen kumuliert`,
+                  Population) %>%
+    gather(Type,
+           Cases,
+           -Region,
+           -Date,
+           -Population) %>%
+    mutate(Cases_proportional = Cases / INHABITANTS_AUSTRIA)
 
 
-  return(list(db_at,
-              db_at_old))
+
+  return(wikipedia_table_conv)
 
 }
 
-plot_growth_data<-function(db_at){
 
-  growth<-db_at %>%
+get_infected<-function(db,
+               region){
+  db <- db %>%
+    filter(Region == region) %>%
+    filter(Type == "Infected")
+
+  return(db)
+}
+
+get_growth<-function(db){
+  growth<-db %>%
     # first sort by year
-    arrange(Datum) %>%
-    mutate(selector = ((n()-1):0)%%5) %>%
-    filter(selector == 0) %>%
-    mutate(Diff_datum = as.numeric(Datum - lag(Datum)),  # Difference in time (just in case there are gaps)
-           Diff_growth = `Infektionen kumuliert` - lag(`Infektionen kumuliert`),
-           Lag_infektionen = lag(`Infektionen kumuliert`),
-           Rate_percent = 100 * ((Diff_growth /Lag_infektionen)^(1/Diff_datum) - 1)) %>%
-    dplyr::select(Datum,
-                  Diff_datum,
+    arrange(Date) %>%
+    mutate(Selector = ((n()-1):0)%%5) %>%
+    filter(Selector == 0) %>%
+    mutate(Diff_date = as.numeric(Date - lag(Date)),  # Difference in time (just in case there are gaps)
+           Diff_growth = Cases - lag(Cases),
+           Lag_cases = lag(Cases),
+           Rate_percent = 100 * ((Cases /Lag_cases)^(1/Diff_date) - 1))   %>%
+    dplyr::select(Date,
+                  Diff_date,
                   Diff_growth,
                   Rate_percent,
-                  Lag_infektionen) %>%
-    mutate(Verdopplung = 70 /(Rate_percent))
+                  Lag_cases)
+
+  return(growth)
+}
+
+plot_growth_data<-function(db,
+                           region = "Austria"){
+
+  db<-get_infected(db,
+                  region)
+
+  growth<-get_growth(db)
 
   p <- growth %>%
-    ggplot(aes(x = Datum, y = Rate_percent)) +
+    ggplot(aes(x = Date, y = Rate_percent)) +
     geom_bar(stat = "identity", fill = COLORS[1]) +
-    ylab("4 Tages-Wachstumsrate der Infektionen (%)") +
-    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db_at)))
+    ylab("Tägliche Wachstumsrate der\n positiv getesteten Individuen\n
+         (5-Tagesdurchschnitt in %)") +
+    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:",
+                         get_last_date(db)))
 
 
 
@@ -286,31 +278,21 @@ plot_growth_data<-function(db_at){
 
 }
 
-plot_doubling_time<-function(db_at){
+plot_doubling_time<-function(db,
+                             region = "Austria"){
 
+  db<-get_infected(db,
+                  region)
 
-growth<-db_at %>%
-  # first sort by year
-  arrange(Datum) %>%
-  mutate(selector = ((n()-1):0)%%5) %>%
-  filter(selector == 0) %>%
-  mutate(Diff_datum = as.numeric(Datum - lag(Datum)),  # Difference in time (just in case there are gaps)
-         Diff_growth = `Infektionen kumuliert` - lag(`Infektionen kumuliert`),
-         Lag_infektionen = lag(`Infektionen kumuliert`),
-         Rate_percent = 100 * ((Diff_growth /Lag_infektionen)^(1/Diff_datum) - 1)) %>%
-  dplyr::select(Datum,
-                Diff_datum,
-                Diff_growth,
-                Rate_percent,
-                Lag_infektionen) %>%
-  mutate(Verdopplung = 70 /(Rate_percent))
+  growth <- get_growth(db) %>%
+  mutate(Doubling = log(2) /log(1+Rate_percent/100))
 
 
 p<-growth %>%
-  ggplot(aes(x = Datum, y = Verdopplung)) +
+  ggplot(aes(x = Date, y = Doubling)) +
   geom_bar(stat = "identity", fill = COLORS[1]) +
-  ylab("~Verdopplungszeit (Tage)") +
-  labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db_at)))
+  ylab("Verdopplungszeit der positiv getesteten Individuen\n(5-Tagesdurchschnitt in Tagen)") +
+  labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db)))
 
 
 ggsave(DOUBLING_FILENAME,
@@ -322,47 +304,43 @@ p
 
 }
 
-#' Download, clean and save data on infections in Italy from wikipedia
-#'
-#' @param url Url to the wikipedia page. Is preconfigured and may only be changed if wikipedia URL changed.
-#' @return A tibble with infection data for Italy
-#'
-#' @examples
-#' scrape_wikipedia_it()
-scrape_wikipedia_it<-function(wikipedia_url = WIKIPEDIA_URL_IT){
-
-  if(!dir.exists("figures")){
-    dir.create("figures")
-  }
-
-  if(!dir.exists("data")){
-    dir.create("data")
-  }
+manual_data_entry<-function(db,
+                  date,
+                  cases_infected_cum,
+                  cases_recovered_cum,
+                  cases_dead_cum,
+                  tests,
+                  region = "Austria") {
 
 
-  webpage <- xml2::read_html(wikipedia_url)
+  population<-wb(indicator = "SP.POP.TOTL") %>%
+    filter(date == 2018) %>%
+    dplyr::select(country,
+                  value) %>%
+    filter(country == region)
 
-  wikipedia_table <- rvest::html_table(webpage, fill = TRUE)[[2]]
 
-  wikipedia_table_clean <- wikipedia_table %>%
-    mutate(Datum = str_replace(Datum, "[\\(]","")) %>%
-    mutate(Datum = str_replace(Datum, "[\\)]","")) %>%
-    mutate(Datum = str_replace(Datum, "\\.20", ".2020 "))   %>%
-    mutate(Datum = as.POSIXct(Datum, format = "%d.%m.%Y %H:%M")) %>%
-    filter(!is.na(Datum)) %>%
-    mutate(Infektionen = `Infektionen (kumuliert)`)
+  new_entry <- tibble(
+    Region = rep(region, 4),
+    Date = rep(date, 4),
+    Population = rep(population$value, 4),
+    Type = c("Infected",
+             "Recovered",
+             "Dead",
+             "Nmb_Tested"),
+    Cases = c(cases_infected_cum,
+              cases_recovered_cum,
+              cases_dead_cum,
+              tests)
+  ) %>%
+    mutate(Cases_proportional = Cases / Population)
 
-  #wikipedia_table_clean <- wikipedia_table_clean %>%
-  #  mutate(`Testungen kumuliert` = str_replace(`Testungen kumuliert`, "\\.", "")) %>%
-  #  mutate(`Testungen kumuliert` = str_replace(`Testungen kumuliert`, "\\[.*\\]", "")) %>%
-  #  mutate() %>%
-  #  as_tibble()
+  db<-db %>%
+    bind_rows(new_entry)
 
-  return(wikipedia_table_clean)
+  return(db)
 
 }
-
-
 
 #' Compares Austrian and Italian infection data
 #'
@@ -401,7 +379,7 @@ plot_compare_at_it<-function(days_shift = 8){
     geom_line(aes(col = Country), size = 1) +
     geom_point(aes(col = Country)) +
     scale_color_manual(values = COLORS[c(1,6)]) +
-    ylab("Infektionen (% Gesamtpopulation)")
+    ylab("Positiv getestete Individuen (% Gesamtpopulation)")
 
   ggsave(COMPARISON_AT_IT_FILENAME,
          p,
@@ -421,9 +399,9 @@ plot_compare_at_it<-function(days_shift = 8){
 #'
 #' @examples
 #' get_last_date(scrape_wikipedia_at()[[1]])
-get_last_date<-function(wikipedia_table){
+get_last_date<-function(db){
 
-  return(wikipedia_table$Datum[nrow(wikipedia_table)])
+  return(db$Date[nrow(db)])
 
 }
 
@@ -435,9 +413,9 @@ get_last_date<-function(wikipedia_table){
 #'
 #' @examples
 #' get_first_date(scrape_wikipedia_at()[[1]])
-get_first_date<-function(wikipedia_table){
+get_first_date<-function(db){
 
-  return(wikipedia_table$Datum[1])
+  return(db$Date[1])
 
 }
 
@@ -455,20 +433,24 @@ get_first_date<-function(wikipedia_table){
 #'
 #' @examples
 #' plot_overiew_at(scrape_wikipedia_at()[[1]])
-plot_overview_at<-function(wikipedia_table){
+plot_overview<-function(db,
+                           region = "Austria") {
+
+  db<-db %>%
+      filter(Region == region) %>%
+      filter(Type %in% c("Infected",
+                         "Recovered",
+                         "Dead"))
+
   #### plot overview data
-  p <- wikipedia_table %>%
-    gather(Variable, Value, -Datum) %>%
-    filter(Variable %in% c("Infektionen kumuliert",
-                         "Genesen kumuliert",
-                         "Aktuell Infizierte")) %>%
-    ggplot(aes(x = Datum, y = Value)) +
-    geom_point(aes(col = Variable)) +
-    geom_line(aes(col = Variable),
+  p <- db %>%
+    ggplot(aes(x = Date, y = Cases)) +
+    geom_point(aes(col = Type)) +
+    geom_line(aes(col = Type),
             size=1) +
     scale_color_manual(values = COLORS[c(1,5, 10)]) +
     ylab("Wert (Individuen)") +
-    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(wikipedia_table)))
+    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db)))
 
   ggsave(OVERVIEW_FILENAME,
          p,
@@ -496,12 +478,13 @@ generic_mod<-function(wikipedia_table_in,
               model_name){
 
   wikipedia_table_short<-wikipedia_table_in[1:(nrow(wikipedia_table_in) - minus_n),]
-  mod<-lm(Infektionen_trans ~ Datum, data = wikipedia_table_short)
+  mod<-lm(Infektionen_trans ~ Date, data = wikipedia_table_short)
 
   predictions<-predict(mod, week_ahead)
 
-  df<-data.frame(Datum = week_ahead,
-                 fitted = predictions, Model_Name = model_name)
+  df<-data.frame(Date = week_ahead,
+                 fitted = predictions,
+                 Model_Name = model_name)
 
 
   return(df)
@@ -510,56 +493,80 @@ generic_mod<-function(wikipedia_table_in,
 
 
 
-plot_prediction_combined<-function(db_at,
+plot_prediction_combined<-function(db,
+                                   db_international,
                                    final_date,
                                    polynom,
+                                   region1 = "Austria",
+                                   region2 = "Italy",
+                                   delay = 8,
                                    exp = TRUE){
 
-  week_ahead <- data.frame(Datum = c(db_at$Datum,
-                                     seq(as.POSIXct(get_last_date(db_at) + 3600*24),
+  week_ahead <- data.frame(Date = c(db$Date %>% unique(),
+                                     seq(as.POSIXct(get_last_date(db) + 3600*24),
                                          as.POSIXct(final_date) + 3600 * 16,
                                          3600*24)))
+  inhabitants1 <- db %>%
+    filter(Region == region1) %>%
+    summarize(p = max(Population)) %>%
+    unlist()
 
-  base_data <- db_at %>%
-    dplyr::select(Datum,
-                  fitted = `Infektionen kumuliert`
+  inhabitants2 <- db_international %>%
+    filter(Region == region2) %>%
+    summarize(p = max(Population)) %>%
+    unlist()
+
+  db <- get_infected(db,
+                     region1)
+
+  db2 <- get_infected(db_international,
+                      region2)
+
+  base_data <- db %>%
+    dplyr::select(Date,
+                  fitted = Cases
                   ) %>%
     mutate(Model_Name = "Beobachtungen",
            Size = 2)
 
-  db_at_exp <- db_at %>%
-    mutate(Infektionen_trans = log(`Infektionen kumuliert`))
+  db_exp <- db %>%
+    filter(Cases > 0) %>%
+    mutate(Infektionen_trans = log(Cases))
 
-  db_at_poly <- db_at %>%
-    mutate(Infektionen_trans = (`Infektionen kumuliert`)^(1/polynom))
+  db_poly <- db %>%
+    mutate(Infektionen_trans = (Cases)^(1/polynom))
 
-  it<-scrape_wikipedia_it() %>%
-    mutate(Datum = Datum + 8*3600*24) %>%
-    mutate(fitted = `Infektionen (kumuliert)` * INHABITANTS_AUSTRIA / INHABITANTS_ITALY) %>%
-    mutate(Model_Name = "Italien \n(8 Tage nach hinten versetzt)",
+
+  model_name_region <- paste0(region2, " (",delay," Tage nach hinten versetzt)")
+
+  db2<-db2 %>%
+    mutate(Date = Date + delay*3600*24) %>%
+    mutate(fitted = (Cases * inhabitants1 / inhabitants2)) %>%
+    mutate(Model_Name = model_name_region,
            Size = 1) %>%
-    dplyr::select(Datum,
+    dplyr::select(Date,
                   fitted,
                   Model_Name,
                   Size)
 
 
 
-  results <- generic_mod(db_at_exp,
+  results <- generic_mod(db_exp,
                          0,
                          week_ahead,
                          "Exponentielles Modell") %>%
     mutate(fitted = exp(fitted),
            Size = 1) %>%
     bind_rows(generic_mod(
-      db_at_poly,
+      db_poly,
       0,
       week_ahead,
-      "Polynomielles Modell"
+      paste0("Polynomielles Modell\n Grad = ", polynom)
     ) %>%
+      mutate(Date = as.POSIXct(Date)) %>%
       mutate(fitted = fitted^polynom,
              Size = 1)) %>%
-    bind_rows(it) %>%
+    bind_rows(db2) %>%
     bind_rows(base_data)
 
   results$Model_Name <- factor(results$Model_Name)
@@ -569,10 +576,10 @@ plot_prediction_combined<-function(db_at,
   estimates_ahead <- results %>% group_by(Model_Name) %>%
     summarize(res = max(fitted))
 
-  estimate_italy <- results %>%
-    filter(Model_Name == "Italien \n(8 Tage nach hinten versetzt)") %>%
+  estimate_2 <- results %>%
+    filter(Model_Name == model_name_region) %>%
     dplyr::select(fitted) %>% unlist()
-  estimate_italy <- estimate_italy[nrow(it) - 4]
+  estimate_2 <- estimate_2[nrow(db2)]
 
   results %>%
     dplyr::select(-Size) %>%
@@ -585,17 +592,18 @@ plot_prediction_combined<-function(db_at,
   }
 
   p <- results %>%
-         ggplot(aes(x = Datum, y = fitted)) +
+         ggplot(aes(x = Date, y = fitted)) +
          geom_line(aes(col = Model_Name), size = 1) +
          geom_point(aes(col = Model_Name), size = 2) +
          scale_color_manual(values = COLORS) +
          ylab("Anzahl positiv getesteter Individuen") +
     labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:",
                          get_last_date(db_at),
-                         "\nVorhersage Infektionen am ", final_date, "Polynomielles Modell: ",
+                         "\nVorhersage positiv getesteter Individuen am ", final_date, "\nPolynomielles Modell: ",
                          round(estimates_ahead$res[1]),
-                         "\nItalien (8 Tage nach hinten versetzt): ",
-                         round(estimate_italy),
+                         "\n",
+                         model_name_region,
+                         round(estimate_2),
                          "\nExponentielles Modell: ",
                          round(estimates_ahead$res[3])
                          ))
@@ -632,24 +640,28 @@ plot_prediction_combined<-function(db_at,
 #' @example
 #' plot_prediction(scrape_wikipedia_at()[[1]], Sys.Date() + 3, 3)
 #'
-plot_prediction<-function(wikipedia_table,
+plot_prediction<-function(db,
                           final_date,
                           steps = 3,
                           transformation_f = log,
                           transformation_f_inverse = exp,
-                          add_string =  " (exponentielles Modell M1): "){
+                          add_string =  " (exponentielles Modell M1): ",
+                          region = "Austria"){
 
+  db<-get_infected(db,
+                   region)
 
-  wikipedia_table_transform <- wikipedia_table %>%
-    mutate(Infektionen_trans = transformation_f(`Infektionen kumuliert`))
+  db_transform <- db %>%
+    filter(Cases > 0) %>%
+    mutate(Infektionen_trans = transformation_f(Cases))
 
-  week_ahead<-data.frame(Datum = c(wikipedia_table_transform$Datum,
-                                   seq(as.POSIXct(get_last_date(wikipedia_table) + 3600*24),
+  week_ahead<-data.frame(Date = c(db$Date %>% unique(),
+                                   seq(as.POSIXct(get_last_date(db) + 3600*24),
                                        as.POSIXct(final_date) + 3600 * 16,
                                        3600*24)))
 
   results <- mapply(generic_mod,
-         list(wikipedia_table_transform),
+         list(db_transform),
          0:steps,
          list(week_ahead),
          paste0("M",0:steps),
@@ -657,14 +669,14 @@ plot_prediction<-function(wikipedia_table,
 
   res<-bind_rows(results)
 
-  forecast<-bind_cols(data.frame(Datum = wikipedia_table_transform$Datum,
-                                 Infektionen_trans = (wikipedia_table_transform$Infektionen_trans)),
-          data.frame(fitted=rep(NA, nrow(wikipedia_table_transform)), Model_Name = "M")) %>%
+  forecast<-bind_cols(data.frame(Date = db_transform$Date,
+                                 Infektionen_trans = (db_transform$Infektionen_trans)),
+          data.frame(fitted=rep(NA, nrow(db_transform)), Model_Name = "M")) %>%
           bind_rows(res) %>%
-        mutate(Infektionen = transformation_f_inverse(Infektionen_trans),
+        mutate(Infected = transformation_f_inverse(Infektionen_trans),
          Prediction = transformation_f_inverse(fitted)) %>%
-    dplyr::select(Datum, Infektionen, Prediction, Model_Name) %>%
-    gather(Variable, Value, -Datum, -Model_Name)
+    dplyr::select(Date, Infected, Prediction, Model_Name) %>%
+    gather(Variable, Value, -Date, -Model_Name)
 
   prediction_week_ahead <- forecast %>%
     filter(Variable == "Prediction" & Model_Name == "M0") %>%
@@ -676,14 +688,14 @@ plot_prediction<-function(wikipedia_table,
     write_feather(path = paste0("data/prediction", Sys.Date()))
 
   p <- forecast %>%
-    ggplot(aes(x = Datum, y = Value)) +
+    ggplot(aes(x = Date, y = Value)) +
     geom_point() +
     geom_line(aes(col = Model_Name, linetype = Variable), size = 1.1) +
     scale_color_manual(values = COLORS) +
     ylab("Infektionen (Faelle)") +
     labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:",
-                         get_last_date(wikipedia_table),
-                       "\nVorhersage Infektionen am ", final_date, add_string,
+                         get_last_date(db),
+                       "\nVorhersage positiv getestete Individuen am ", final_date, add_string,
                        round(prediction_week_ahead)))
 
   ggsave(MODEL_FILENAME,
@@ -706,20 +718,30 @@ plot_prediction<-function(wikipedia_table,
 #' @examples
 #' plot_infected_tests_ratio(scrape_wikipedia_at()[[1]])
 
-plot_infected_tests_ratio<-function(wikipedia_table){
+plot_infected_tests_ratio<-function(db,
+                                    region = "Austria"){
 
-  first_value_testungen <- wikipedia_table$`Testungen kumuliert`[1]
+  db<-db %>%
+    filter(Region == region & Type %in% c("Nmb_Tested", "Infected")) %>%
+    arrange(Date) %>%
+    dplyr::select(Date, Type, Cases) %>%
+    spread(Type, Cases)
 
 
-  p <- wikipedia_table %>%
-    mutate(Testungen = c(first_value_testungen, diff(`Testungen kumuliert`))) %>%
-    dplyr::select(Datum, `Testungen kumuliert`, Testungen, Neuinfektionen) %>%
-      mutate(`Verh?ltnis Infektionen zu Tests` = 100 * Neuinfektionen/Testungen) %>%
-    ggplot(aes(x = Datum, `Verh?ltnis Infektionen zu Tests`)) +
+  first_value_tests <- db$Nmb_Tested[1]
+  first_value_infected <- db$Infected[1]
+
+
+  p <- db %>%
+    mutate(Tests_Ind = c(first_value_tests, diff(Nmb_Tested))) %>%
+    mutate(Infected_Ind = c(first_value_infected, diff(Infected))) %>%
+    dplyr::select(Date, Nmb_Tested, Tests_Ind, Infected_Ind) %>%
+      mutate(Prop_Infected_Tests = 100 * Infected_Ind/Tests_Ind) %>%
+    ggplot(aes(x = Date, y = Prop_Infected_Tests)) +
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1], size = 1) +
     ylab("Verhaeltnis Covid-19 Infektionen zu Tests (%)") +
-    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(wikipedia_table)))
+    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db)))
 
 
   ggsave(INFECTED_TEST_RATIO_FILENAME,
@@ -744,18 +766,29 @@ plot_infected_tests_ratio<-function(wikipedia_table){
 #' @examples
 #' plot_number_tests(scrape_wikipedia_at()[[1]])
 
-plot_number_tests<-function(wikipedia_table){
+plot_number_tests<-function(db,
+                            region = "Austria"){
 
-  first_value_testungen <- wikipedia_table$`Testungen kumuliert`[1]
+  db<-db %>%
+    filter(Region == region & Type %in% c("Nmb_Tested", "Infected")) %>%
+    arrange(Date) %>%
+    dplyr::select(Date,
+                  Type,
+                  Cases) %>%
+    spread(Type,
+           Cases)
 
-  p <- wikipedia_table %>%
-    mutate(Testungen = c(first_value_testungen, diff(`Testungen kumuliert`))) %>%
-    dplyr::select(Datum, `Testungen kumuliert`, Testungen, Neuinfektionen) %>%
-    ggplot(aes(x = Datum, `Testungen`)) +
+
+  first_value_tests <- db$Nmb_Tested[1]
+
+  p <- db %>%
+    mutate(Tests_Ind = c(first_value_tests, diff(Nmb_Tested))) %>%
+    ggplot(aes(x = Date, y = Tests_Ind)) +
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1], size = 1) +
-    ylab("Anzahl Tests") +
-    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(wikipedia_table)))
+    ylab("Verhaeltnis Covid-19 Infektionen zu Tests (%)") +
+    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db)))
+
 
   ggsave(NMB_TESTS_FILENAME,
          p,
@@ -763,79 +796,4 @@ plot_number_tests<-function(wikipedia_table){
          height = 5)
 
   p
-}
-
-
-#### tweet results
-
-tweet_results <- function(wikipedia_table_conv,
-                          wikipedia_table_conv_old,
-                          tweet_always = FALSE){
-
-  tweet<-tweet_always
-
-  if(is.null(wikipedia_table_conv_old)){
-    tweet<-TRUE
-  }else{
-
-    last_date<-get_last_date(wikipedia_table_conv)
-    last_date_old<-get_last_date(wikipedia_table_conv_old)
-    if(last_date>last_date_old){
-
-      tweet<-TRUE
-
-      }
-  }
-
-  if(tweet){
-    authentification <- feather("authentification")
-
-    setup_twitter_oauth(consumer_key = authentification$consumer_key[1],
-                    access_token = authentification$access_token[1],
-                    consumer_secret = authentification$consumer_secret[1],
-                    access_secret = authentification$access_secret[1])
-
-
-    tweet1<-updateStatus(text = "#COVID_19 Vorhersage mit exponentiellem, polynomiellem und Italien Modell.",
-                       mediaPath = PREDICTIONS_FILENAME
-                        )
-
-    tweet2<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Vergleich Infektionen Italien und Österreich (8 Tage nach vorne versetzt): ",
-                         mediaPath = COMPARISON_AT_IT_FILENAME,
-                         inReplyTo=tweet1$id
-    )
-
-
-    tweet3<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Wachstumsrate: ",
-                         mediaPath = GROWTH_RATE_FILENAME,
-                         inReplyTo=tweet2$id
-    )
-
-    tweet4<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Dauer Verdopplungen der Infektionen in Tagen:  ",
-                     mediaPath = DOUBLING_FILENAME,
-                     inReplyTo=tweet3$id)
-
-
-    tweet5<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Gesamtanzahl Tests",
-                     mediaPath = NMB_TESTS_FILENAME,
-                     inReplyTo=tweet4$id)
-
-    tweet6<-updateStatus(text = "#COVID_19 Data Update fuer Oesterreich. Verhaeltnis Infektionen : Tests:",
-                         mediaPath = INFECTED_TEST_RATIO_FILENAME,
-                         inReplyTo=tweet5$id)
-
-
-    tweet7<-updateStatus(text = "#COVID_19 Data Update. Vergleich Laender. Datenpunkte bis zum Vortag.",
-                         mediaPath = COUNTRY_COMPARISON_FILENAME,
-                         inReplyTo=tweet6$id)
-
-
-    tweet8<-updateStatus(text = "#COVID_19 #R-Stats Code for analysis of Austrian infection data here: https://github.com/joph/Covid19-Austria",
-                         inReplyTo=tweet7$id)
-
-
-
-  }
-
-
 }
