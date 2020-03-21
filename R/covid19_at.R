@@ -82,7 +82,8 @@ download_international_cases<-function(){
     summarize(Cases = sum(Cases)) %>%
     dplyr::select(Region, Date, Type, Cases) %>%
     ungroup() %>%
-    mutate(Region = ifelse(Region == "US", "United States", Region))
+    mutate(Region = ifelse(Region == "US", "United States", Region)) %>%
+    mutate(Region = ifelse(Region == "Korea, South", "Korea, Rep.", Region))
 
   population<-wb(indicator = "SP.POP.TOTL") %>%
     filter(date == 2018) %>%
@@ -265,7 +266,9 @@ plot_growth_data<-function(db,
     ylab("Tägliche Wachstumsrate der\n positiv getesteten Individuen\n
          (5-Tagesdurchschnitt in %)") +
     labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:",
-                         get_last_date(db)))
+                         get_last_date(db))) +
+    ggtitle(region) +
+    theme(plot.title = element_text(hjust = 0.5))
 
 
 
@@ -292,7 +295,9 @@ p<-growth %>%
   ggplot(aes(x = Date, y = Doubling)) +
   geom_bar(stat = "identity", fill = COLORS[1]) +
   ylab("Verdopplungszeit der positiv getesteten Individuen\n(5-Tagesdurchschnitt in Tagen)") +
-  labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db)))
+  labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db))) +
+  ggtitle(region) +
+  theme(plot.title = element_text(hjust = 0.5))
 
 
 ggsave(DOUBLING_FILENAME,
@@ -306,10 +311,10 @@ p
 
 manual_data_entry<-function(db,
                   date,
-                  cases_infected_cum,
-                  cases_recovered_cum,
-                  cases_dead_cum,
-                  tests,
+                  cases_infected_cum = NA,
+                  cases_recovered_cum = NA,
+                  cases_dead_cum =NA,
+                  tests = NA,
                   region = "Austria") {
 
 
@@ -341,55 +346,6 @@ manual_data_entry<-function(db,
   return(db)
 
 }
-
-#' Compares Austrian and Italian infection data
-#'
-#' The function creates a plot comparing Austrian and Italian infection data.
-#' It saves the plot to COMPARISON_AT_IT_FILENAME
-#'
-#' @param days_shift How many days the Austrian data is shifted
-#' @return
-#'
-#' @examples
-#' plot_compare_at_it()
-plot_compare_at_it<-function(days_shift = 8){
-
-
-  wiki_at <- covid19at::scrape_wikipedia_at()[[1]]
-  wiki_it <- covid19at::scrape_wikipedia_it()
-
-  wiki_at <- wiki_at %>%
-    mutate(Infektionen = `Infektionen kumuliert` / INHABITANTS_AUSTRIA) %>%
-    mutate(Country = paste0("Österreich \n (", days_shift, " Tage nach vorne versetzt)")) %>%
-    dplyr::select(Datum, Country, Infektionen) %>%
-    mutate(Datum = Datum - 24*3600*days_shift)
-
-  wiki_it <- wiki_it %>%
-    mutate(Infektionen = Infektionen / INHABITANTS_ITALY) %>%
-    mutate(Country = "Italien") %>%
-    dplyr::select(Datum, Country, Infektionen)
-
-  #wiki_it <- wiki_it[-1,]
-
-  merged <- bind_rows(wiki_at,
-                      wiki_it)
-
-  p<-merged %>%
-    ggplot(aes(x = Datum, y = Infektionen * 100)) +
-    geom_line(aes(col = Country), size = 1) +
-    geom_point(aes(col = Country)) +
-    scale_color_manual(values = COLORS[c(1,6)]) +
-    ylab("Positiv getestete Individuen (% Gesamtpopulation)")
-
-  ggsave(COMPARISON_AT_IT_FILENAME,
-         p,
-         width = 10,
-         height = 5)
-
-  p
-
-}
-
 
 #' Get date of last available data point in db
 #'
@@ -450,7 +406,9 @@ plot_overview<-function(db,
             size=1) +
     scale_color_manual(values = COLORS[c(1,5, 10)]) +
     ylab("Wert (Individuen)") +
-    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db)))
+    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db))) +
+    ggtitle(region) +
+    theme(plot.title = element_text(hjust = 0.5))
 
   ggsave(OVERVIEW_FILENAME,
          p,
@@ -500,7 +458,9 @@ plot_prediction_combined<-function(db,
                                    region1 = "Austria",
                                    region2 = "Italy",
                                    delay = 8,
-                                   exp = TRUE){
+                                   exp = TRUE,
+                                   limDate = Sys.Date() - 30,
+                                   colors_in = COLORS){
 
   week_ahead <- data.frame(Date = c(db$Date %>% unique(),
                                      seq(as.POSIXct(get_last_date(db) + 3600*24),
@@ -527,7 +487,7 @@ plot_prediction_combined<-function(db,
                   fitted = Cases
                   ) %>%
     mutate(Model_Name = "Beobachtungen",
-           Size = 2)
+           Size = 1.1)
 
   db_exp <- db %>%
     filter(Cases > 0) %>%
@@ -592,10 +552,11 @@ plot_prediction_combined<-function(db,
   }
 
   p <- results %>%
+         filter(Date > limDate) %>%
          ggplot(aes(x = Date, y = fitted)) +
          geom_line(aes(col = Model_Name), size = 1) +
          geom_point(aes(col = Model_Name), size = 2) +
-         scale_color_manual(values = COLORS) +
+         scale_color_manual(values = colors_in) +
          ylab("Anzahl positiv getesteter Individuen") +
     labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:",
                          get_last_date(db_at),
@@ -603,10 +564,13 @@ plot_prediction_combined<-function(db,
                          round(estimates_ahead$res[1]),
                          "\n",
                          model_name_region,
-                         round(estimate_2),
-                         "\nExponentielles Modell: ",
-                         round(estimates_ahead$res[3])
-                         ))
+                         round(estimate_2)
+                         #,
+                         #"\nExponentielles Modell: ",
+                         #round(estimates_ahead$res[3])
+                         )) +
+    ggtitle(region1) +
+    theme(plot.title = element_text(hjust = 0.5))
 
   ggsave(PREDICTIONS_FILENAME,
          p,
@@ -696,7 +660,10 @@ plot_prediction<-function(db,
     labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:",
                          get_last_date(db),
                        "\nVorhersage positiv getestete Individuen am ", final_date, add_string,
-                       round(prediction_week_ahead)))
+                       round(prediction_week_ahead))) +
+    ggtitle(region) +
+    theme(plot.title = element_text(hjust = 0.5))
+
 
   ggsave(MODEL_FILENAME,
          p,
@@ -741,7 +708,9 @@ plot_infected_tests_ratio<-function(db,
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1], size = 1) +
     ylab("Verhaeltnis Covid-19 Infektionen zu Tests (%)") +
-    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db)))
+    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db))) +
+    ggtitle(region) +
+    theme(plot.title = element_text(hjust = 0.5))
 
 
   ggsave(INFECTED_TEST_RATIO_FILENAME,
@@ -787,7 +756,9 @@ plot_number_tests<-function(db,
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1], size = 1) +
     ylab("Verhaeltnis Covid-19 Infektionen zu Tests (%)") +
-    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db)))
+    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db))) +
+    ggtitle(region) +
+    theme(plot.title = element_text(hjust = 0.5))
 
 
   ggsave(NMB_TESTS_FILENAME,
