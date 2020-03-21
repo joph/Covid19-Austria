@@ -1,6 +1,6 @@
 # Covid19-Austria
 
-Package which scrapes Austrian infection data from wikipedia and produces figures on infections and infection to test ratios.
+Package which scrapes Austrian Covid-19 infection data from wikipedia and downloads international Covid-19 data from [Johns Hopkins CSSE](https://github.com/CSSEGISandData/COVID-19/) and produces figures on infections and infection to test ratios.
 Automatically posts figures to twitter. (needs a twitter app configured).
 
 ## Installation
@@ -73,8 +73,8 @@ plot_prediction(db_international,
 
 ### Creates these figures
 
-<img src = ""figures/covid19_growth_rate.png"" width="600">
-<img src = ""figures/covid19_doubling.png" width="600">
+<img src = "figures/covid19_growth_rate.png" width="600">
+<img src = "figures/covid19_doubling.png" width="600">
 <img src = "figures/covid19_infektionen.png" width="600">
 <img src = "figures/covid19_predictions_comparison.png" width="600">
 <img src = "figures/covid19_vergleich_laender.png" width="600">
