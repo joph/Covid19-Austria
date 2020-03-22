@@ -25,6 +25,7 @@ COUNTRY_COMPARISON_FILENAME<-"figures/covid19_vergleich_laender.png"
 PREDICTIONS_FILENAME<-"figures/covid19_predictions_comparison.png"
 GROWTH_RATE_FILENAME<-"figures/covid19_growth_rate.png"
 DOUBLING_FILENAME<-"figures/covid19_doubling.png"
+FILE_NAME_LOG_PLOT <-"figures/covid19_log.png"
 
 ### source eurostat
 INHABITANTS_ITALY <- 60.48*10^6
@@ -122,7 +123,7 @@ plot_country_comparison<-function(db_,
     filter(Region %in% countries) %>%
     filter(Type == "Infected") %>%
     ggplot(aes(x = Date, y = Cases_proportional * 100)) +
-    geom_line(aes(col = Region), size = 1) +
+    geom_line(aes(col = Region)) +
     ylab("Positiv getestete Individuen (% der Bevölkerung)") +
     scale_color_manual(values = COLORS) +
     labs(caption = paste("Quelle: https://raw.githubusercontent.com/CSSEGISandData/COVID-19/", ""))
@@ -164,8 +165,8 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
   names(wikipedia_table_clean)<-c("Datum",
                                 "NOE",	"W",	"St",	"T",	"O?",	"S",	"B",	"V",	"K",
                                 "Infektionen kumuliert",
-                                "Genesen kumuliert",
                                 "Aktuell Infizierte",
+                                "Genesen kumuliert",
                                 "Todesf?lle kumuliert",
                                 "Neuinfektionen",
                                 "Zuwachs",
@@ -233,11 +234,12 @@ get_infected<-function(db,
   return(db)
 }
 
-get_growth<-function(db){
+get_growth<-function(db,
+                     avg){
   growth<-db %>%
     # first sort by year
     arrange(Date) %>%
-    mutate(Selector = ((n()-1):0)%%5) %>%
+    mutate(Selector = ((n()-1):0) %% avg) %>%
     filter(Selector == 0) %>%
     mutate(Diff_date = as.numeric(Date - lag(Date)),  # Difference in time (just in case there are gaps)
            Diff_growth = Cases - lag(Cases),
@@ -253,18 +255,36 @@ get_growth<-function(db){
 }
 
 plot_growth_data<-function(db,
-                           region = "Austria"){
+                           region = "Austria",
+                           avg = 5){
 
-  db<-get_infected(db,
+  db1<-get_infected(db,
                   region)
 
-  growth<-get_growth(db)
+  growth1<-get_growth(db1,
+                     avg) %>%
+    mutate(Type = "Wachstumsrate Positiv \ngetestete Individuen")
+
+  db2<-db %>%
+    filter(Region == region) %>%
+    filter(Type == "Nmb_Tested")
+
+  growth2<-get_growth(db2,
+                      avg) %>%
+    mutate(Type = "Wachstumsrate Anzahl Tests")
+
+
+  growth<-bind_rows(growth1,
+                    growth2)
 
   p <- growth %>%
     ggplot(aes(x = Date, y = Rate_percent)) +
-    geom_bar(stat = "identity", fill = COLORS[1]) +
-    ylab("Tägliche Wachstumsrate der\n positiv getesteten Individuen\n
-         (5-Tagesdurchschnitt in %)") +
+    geom_bar(stat = "identity", aes(fill = Type), position = "dodge") +
+    scale_fill_manual(values = COLORS) +
+    ylab(paste0("Tägliche Wachstumsrate\n",
+                "(",
+                avg,
+                "-Tagesdurchschnitt in %)")) +
     labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:",
                          get_last_date(db))) +
     ggtitle(region) +
@@ -281,20 +301,56 @@ plot_growth_data<-function(db,
 
 }
 
+log_plot<-function(db,
+                   variable = "Infected",
+                   regions = c("Austria"),
+                   lab = "Positiv getestete Individuen \n(% der Bevölkerung, Logarithmische Skala)"){
+
+  db<-db %>%
+    filter(Type == variable) %>%
+    filter(Region %in% regions)
+
+  p <- db %>%
+    ggplot(aes(x = Date, y = Cases_proportional)) +
+    geom_line(aes(col = Region)) +
+    labs(caption = paste("Quelle: https://raw.githubusercontent.com/CSSEGISandData/COVID-19/", get_last_date(db))) +
+    ylab(lab) +
+    scale_y_log10() +
+    scale_color_manual(values = COLORS) +
+    scale_x_discrete(expand=c(0, 1000000)) +
+    geom_dl(aes(label = Region, col = Region),
+            method = list(dl.combine("last.points"),
+                          cex = 0.8))
+
+  ggsave(FILE_NAME_LOG_PLOT,
+         p)
+
+  p
+
+
+
+
+}
+
 plot_doubling_time<-function(db,
-                             region = "Austria"){
+                             region = "Austria",
+                             avg = 5){
 
   db<-get_infected(db,
                   region)
 
-  growth <- get_growth(db) %>%
+  growth <- get_growth(db,
+                       avg) %>%
   mutate(Doubling = log(2) /log(1+Rate_percent/100))
 
 
 p<-growth %>%
   ggplot(aes(x = Date, y = Doubling)) +
   geom_bar(stat = "identity", fill = COLORS[1]) +
-  ylab("Verdopplungszeit der positiv getesteten Individuen\n(5-Tagesdurchschnitt in Tagen)") +
+  ylab(paste0("Verdopplungszeit der\n positiv getesteten Individuen\n",
+              "(",
+              avg,
+              "-Tagesdurchschnitt in Tagen)")) +
   labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db))) +
   ggtitle(region) +
   theme(plot.title = element_text(hjust = 0.5))
@@ -402,13 +458,13 @@ plot_overview<-function(db,
   p <- db %>%
     ggplot(aes(x = Date, y = Cases)) +
     geom_point(aes(col = Type)) +
-    geom_line(aes(col = Type),
-            size=1) +
+    geom_line(aes(col = Type)) +
     scale_color_manual(values = COLORS[c(1,5, 10)]) +
-    ylab("Wert (Individuen)") +
+    ylab("Wert (Individuen, logarithmische Skala)") +
     labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db))) +
     ggtitle(region) +
-    theme(plot.title = element_text(hjust = 0.5))
+    theme(plot.title = element_text(hjust = 0.5)) +
+    scale_y_log10()
 
   ggsave(OVERVIEW_FILENAME,
          p,
@@ -460,7 +516,8 @@ plot_prediction_combined<-function(db,
                                    delay = 8,
                                    exp = TRUE,
                                    limDate = Sys.Date() - 30,
-                                   colors_in = COLORS){
+                                   colors_in = COLORS,
+                                   log_scale = FALSE){
 
   week_ahead <- data.frame(Date = c(db$Date %>% unique(),
                                      seq(as.POSIXct(get_last_date(db) + 3600*24),
@@ -486,8 +543,7 @@ plot_prediction_combined<-function(db,
     dplyr::select(Date,
                   fitted = Cases
                   ) %>%
-    mutate(Model_Name = "Beobachtungen",
-           Size = 1.1)
+    mutate(Model_Name = "Beobachtungen")
 
   db_exp <- db %>%
     filter(Cases > 0) %>%
@@ -502,8 +558,8 @@ plot_prediction_combined<-function(db,
   db2<-db2 %>%
     mutate(Date = Date + delay*3600*24) %>%
     mutate(fitted = (Cases * inhabitants1 / inhabitants2)) %>%
-    mutate(Model_Name = model_name_region,
-           Size = 1) %>%
+    mutate(Model_Name = model_name_region) %>%
+    mutate(Size = 1) %>%
     dplyr::select(Date,
                   fitted,
                   Model_Name,
@@ -554,7 +610,7 @@ plot_prediction_combined<-function(db,
   p <- results %>%
          filter(Date > limDate) %>%
          ggplot(aes(x = Date, y = fitted)) +
-         geom_line(aes(col = Model_Name), size = 1) +
+         geom_line(aes(col = Model_Name)) +
          geom_point(aes(col = Model_Name), size = 2) +
          scale_color_manual(values = colors_in) +
          ylab("Anzahl positiv getesteter Individuen") +
@@ -571,6 +627,12 @@ plot_prediction_combined<-function(db,
                          )) +
     ggtitle(region1) +
     theme(plot.title = element_text(hjust = 0.5))
+
+  if(log_scale){
+
+    p<-p + scale_y_log10()
+
+  }
 
   ggsave(PREDICTIONS_FILENAME,
          p,
@@ -654,7 +716,7 @@ plot_prediction<-function(db,
   p <- forecast %>%
     ggplot(aes(x = Date, y = Value)) +
     geom_point() +
-    geom_line(aes(col = Model_Name, linetype = Variable), size = 1.1) +
+    geom_line(aes(col = Model_Name, linetype = Variable)) +
     scale_color_manual(values = COLORS) +
     ylab("Infektionen (Faelle)") +
     labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:",
@@ -706,7 +768,7 @@ plot_infected_tests_ratio<-function(db,
       mutate(Prop_Infected_Tests = 100 * Infected_Ind/Tests_Ind) %>%
     ggplot(aes(x = Date, y = Prop_Infected_Tests)) +
     geom_point(col = COLORS[1]) +
-    geom_line(col = COLORS[1], size = 1) +
+    geom_line(col = COLORS[1]) +
     ylab("Verhaeltnis Covid-19 Infektionen zu Tests (%)") +
     labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db))) +
     ggtitle(region) +
@@ -754,8 +816,8 @@ plot_number_tests<-function(db,
     mutate(Tests_Ind = c(first_value_tests, diff(Nmb_Tested))) %>%
     ggplot(aes(x = Date, y = Tests_Ind)) +
     geom_point(col = COLORS[1]) +
-    geom_line(col = COLORS[1], size = 1) +
-    ylab("Verhaeltnis Covid-19 Infektionen zu Tests (%)") +
+    geom_line(col = COLORS[1]) +
+    ylab("Anzahl Tests (Tests / Tag)") +
     labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db))) +
     ggtitle(region) +
     theme(plot.title = element_text(hjust = 0.5))

@@ -23,5 +23,6 @@ Imports:
     lubridate,
     wbstats,
     readr,
-    SPARQL
+    SPARQL,
+    directlabels
 RoxygenNote: 7.0.2
