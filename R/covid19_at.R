@@ -175,7 +175,7 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 
   wikipedia_table_1 <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[3]]
 
-  wikipedia_table_clean$`Testungen kumuliert`<-tibble(t=(c((wikipedia_table_1$`Testungen aufsummiert`))))$t
+  wikipedia_table_clean$`Testungen kumuliert`<-tibble(t=(c((wikipedia_table_1$`Tests aufsummiert`))))$t
 
 
   wikipedia_table_clean <- wikipedia_table_clean %>%
@@ -224,14 +224,61 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 
 }
 
+scrape_wikipedia_at_states<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 
-get_infected<-function(db,
-               region){
-  db <- db %>%
-    filter(Region == region) %>%
-    filter(Type == "Infected")
+  if(!dir.exists("figures")){
+    dir.create("figures")
+  }
 
-  return(db)
+  if(!dir.exists("data")){
+    dir.create("data")
+  }
+
+
+  webpage <- xml2::read_html(wikipedia_url)
+
+  wikipedia_table <- rvest::html_table(webpage, fill = TRUE)[[2]]
+
+  wikipedia_table_clean <- wikipedia_table[-1,]
+
+  names(wikipedia_table_clean)<-c("Datum",
+                                  "B",	"K",	"NOE",	"OOE",	"S",	"St",	"T_",	"V",	"W",
+                                  "Infektionen kumuliert",
+                                  "Aktuell Infizierte",
+                                  "Genesen kumuliert",
+                                  "Todesf?lle kumuliert",
+                                  "Neuinfektionen",
+                                  "Zuwachs",
+                                  "Zuwachs1")
+
+  wikipedia_table_clean <- wikipedia_table_clean %>%
+    mutate(Datum = str_replace(Datum, "[\\(]","")) %>%
+    mutate(Datum = str_replace(Datum, "[\\)]","")) %>%
+    mutate(Datum = str_replace(Datum, "\\.02\\.", ".02. 08:00")) %>%
+    mutate(Datum = str_replace(Datum, "01\\.03\\.", "01.03. 08:00")) %>%
+    mutate(Datum = str_replace(Datum, "02\\.03\\.", "02.03. 08:00")) %>%
+    mutate(Datum = str_replace(Datum, "\\. ", ".2020 ")) %>%
+    mutate(Datum = as.POSIXct(Datum, format = "%d.%m.%Y %H:%M"))
+
+  state_data <- wikipedia_table_clean %>%
+    dplyr::select(Date = Datum,
+                  Niederösterreich = NOE,
+                  Wien = W,
+                  Steiermark = St,
+                  Tirol = T_,
+                  Oberösterreich = OOE,
+                  Salzburg = S,
+                  Burgenland = B,
+                  Vorarlberg = V,
+                  Kärnten = K)
+
+  state_data <- state_data %>%
+    as_tibble() %>%
+    gather(State, Infected, -Date) %>%
+    mutate(Infected = as.numeric(Infected))
+
+  return(state_data)
+
 }
 
 get_growth<-function(db,
@@ -269,10 +316,13 @@ plot_growth_data<-function(db,
     filter(Region == region) %>%
     filter(Type == "Nmb_Tested")
 
+  growth2<-NULL
+
+  if(nrow(db2) > 0){
   growth2<-get_growth(db2,
                       avg) %>%
     mutate(Type = "Wachstumsrate Anzahl Tests")
-
+  }
 
   growth<-bind_rows(growth1,
                     growth2)

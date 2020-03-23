@@ -3,24 +3,59 @@ library(ggplot2)
 library(tidyverse)
 library(twitteR)
 library(feather)
+library(directlabels)
 
 theme_set(theme_classic(base_size = 16))
 
 update_geom_defaults("line", list(size = 1.2))
 
 
+state_data <- scrape_wikipedia_at_states() %>%
+  bind_rows(tibble(Date = rep(as.POSIXct("2020-03-23 22:00:00"), 9),
+            State = c("Niederösterreich",
+                      "Wien",
+                      "Steiermark",
+                      "Tirol",
+                      "Oberösterreich",
+                      "Salzburg",
+                      "Burgenland",
+                      "Vorarlberg",
+                      "Kärnten"),
+            Infected = c(609,
+                         559,
+                         503,
+                         1069,
+                         762,
+                         404,
+                         85,
+                         352,
+                         135)))
+
+state_data %>%
+  ggplot(aes(x = Date, y = Infected)) +
+  geom_line(aes(col=State)) +
+  scale_y_log10() +
+  scale_x_discrete(expand=c(0, 1000000)) +
+  geom_dl(aes(label = State, col = State),
+          method = list(dl.combine("last.points"),
+                        cex = 0.8)) +
+  scale_color_manual(values = COLORS)
+
+ggsave("figures/states.png")
+
 db_at <- scrape_wikipedia_at()
 db_international <- download_international_cases()
 
+
 db_at <- db_at %>%
-  filter(Date < as.POSIXct("2020-03-21 23:59:00"))
+  filter(Date < as.POSIXct("2020-03-23 23:59:00"))
 
 db_at <- manual_data_entry(db_at,
-                           date = as.POSIXct("2020-03-22 15:00:00"),
-                          cases_infected_cum = 3244,
-                          cases_dead_cum = 16,
+                           date = as.POSIXct("2020-03-24 06:30:00"),
+                          cases_infected_cum = 4474,
+                          cases_dead_cum = 21,
                           cases_recovered_cum = 9,
-                          tests = 21368)
+                          tests = 23429)
 
 
 
@@ -47,15 +82,18 @@ log_plot(db_international,
 
 
 plot_growth_data(db_international,
-                 "Italy")
+                 "Italy",
+                 avg= 7)
 
 
-plot_growth_data(db_at, avg = 4)
+plot_growth_data(db_at,
+                 avg = 7)
 
 plot_doubling_time(db_international,
-                   "Italy")
+                   "Italy",
+                   avg = 7)
 
-plot_doubling_time(db_at, avg = 4)
+plot_doubling_time(db_at, avg = 7)
 
 plot_overview(db_international,
               "United Kingdom")
@@ -64,22 +102,22 @@ plot_overview(db_at)
 
 plot_prediction_combined(db_at,
                          db_international,
-                         Sys.Date() + 7,
+                         Sys.Date() + 2,
                          region1 = "Austria",
                          region2 = "Italy",
                          delay = 8,
-                         polynom = 6,
+                         polynom = 7,
                          exp = FALSE,
-                         limDate = Sys.Date() - 16,
+                         limDate = Sys.Date() - 2,
                          colors = COLORS[c(1, 7, 9)],
-                         log_scale = FALSE)
+                         log_scale = TRUE)
 
-plot_infected_tests_ratio(db_at)
+ plot_infected_tests_ratio(db_at)
 
 plot_number_tests(db_at)
 
-plot_prediction(db_international,
-                Sys.Date() + 4,
+plot_prediction(db_at,
+                Sys.Date() + 2,
                 region = "Austria")
 
 

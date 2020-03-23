@@ -13,6 +13,5 @@ import(moderndive)
 import(lubridate)
 import(wbstats)
 import(readr)
-import(SPARQL)
 import(directlabels)
 
