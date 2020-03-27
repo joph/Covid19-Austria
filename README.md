@@ -23,4 +23,8 @@ See run_analysis.R
 <img src = "figures/covid19_infektionen_tests_ratio.png" width="600">
 <img src = "figures/covid19_anzahl_tests.png" width="600">
 <img src = "figures/covid19_predictions.png" width="600">
+<img src = "figures/covid19_prediction_quality.png" width="600">
+<img src = "figures/covid19_vergleich_laender.png" width="600">
+
+
 
