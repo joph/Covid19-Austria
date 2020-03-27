@@ -48,14 +48,14 @@ db_international <- download_international_cases()
 
 
 db_at <- db_at %>%
-  filter(Date < as.POSIXct("2020-03-23 23:59:00"))
+  filter(Date < as.POSIXct("2020-03-26 05:15:00"))
 
 db_at <- manual_data_entry(db_at,
-                           date = as.POSIXct("2020-03-24 06:30:00"),
-                          cases_infected_cum = 4474,
-                          cases_dead_cum = 21,
+                           date = as.POSIXct("2020-03-27 06:00:00"),
+                          cases_infected_cum = 6909,
+                          cases_dead_cum = 49,
                           cases_recovered_cum = 9,
-                          tests = 23429)
+                          tests = 35995)
 
 
 
@@ -68,7 +68,8 @@ countries<-c("Austria",
   "Brazil",
   #"Korea, Rep.",
   #"South Africa",
-  "Japan")
+  "Japan",
+  "Spain")
 
 log_plot(db_international,
          "Infected",
@@ -96,29 +97,35 @@ plot_doubling_time(db_international,
 plot_doubling_time(db_at, avg = 7)
 
 plot_overview(db_international,
-              "United Kingdom")
+              "Italy")
 
 plot_overview(db_at)
 
 plot_prediction_combined(db_at,
                          db_international,
-                         Sys.Date() + 2,
+                         Sys.Date() + 8,
                          region1 = "Austria",
                          region2 = "Italy",
                          delay = 8,
                          polynom = 7,
                          exp = FALSE,
-                         limDate = Sys.Date() - 2,
+                         limDate = Sys.Date() - 16,
                          colors = COLORS[c(1, 7, 9)],
-                         log_scale = TRUE)
+                         log_scale = FALSE)
 
- plot_infected_tests_ratio(db_at)
+plot_infected_tests_ratio(db_at)
 
 plot_number_tests(db_at)
 
 plot_prediction(db_at,
                 Sys.Date() + 2,
                 region = "Austria")
+
+
+
+prediction_quality(db_at,
+                   0,
+                   3)
 
 
 authentification <- feather("authentification")
@@ -129,37 +136,44 @@ setup_twitter_oauth(consumer_key = authentification$consumer_key[1],
                     access_secret = authentification$access_secret[1])
 
 
-tweet1<-updateStatus(text = "#COVID_19 #coronavirusat Datenupdate Österreich. Vorhersage  mit polynomiellem und Italien-Modell. 1/7",
+tweet1<-updateStatus(text = "#COVID19 #CoronaVirusAt Datenupdate Österreich. Vorhersage  mit polynomiellem und Italien-Modell. 1/7",
                      mediaPath = PREDICTIONS_FILENAME
 )
 
-tweet2<-updateStatus(text = "#COVID_19 #coronavirusat Datenupdate Österreich. Wachstumsrate. 2/7",
-                     mediaPath = GROWTH_RATE_FILENAME,
-                     inReplyTo=tweet1$id
+
+tweet2<-updateStatus(text = "#COVID19 #CoronaVirusAt Datenupdate Österreich. Modellqualität. 2/7",
+                     mediaPath = PREDICTION_QUALITY_FILENAME,
+                     inReplyTo = tweet1$id
 )
 
-tweet3<-updateStatus(text = "#COVID_19 #coronavirusat Datenupdate Österreich. Dauer Verdopplungen der Infektionen in Tagen. 3/7",
+
+tweet3<-updateStatus(text = "#COVID19 #CoronaVirusAt Datenupdate Österreich. Wachstumsrate. 2/7",
+                     mediaPath = GROWTH_RATE_FILENAME,
+                     inReplyTo=tweet2$id
+)
+
+tweet4<-updateStatus(text = "#COVID19 #CoronaVirusAt Datenupdate Österreich. Dauer Verdopplungen der Infektionen in Tagen. 3/7",
                      mediaPath = DOUBLING_FILENAME,
-                     inReplyTo=tweet2$id)
-
-
-tweet4<-updateStatus(text = "#COVID_19 #coronavirusat Datenupdate Österreich. Gesamtanzahl Tests. 4/7",
-                     mediaPath = NMB_TESTS_FILENAME,
                      inReplyTo=tweet3$id)
 
-tweet5<-updateStatus(text = "#COVID_19 #coronavirusat Datenupdate Österreich. Verhältnis Infektionen zu Tests. 5/7",
-                     mediaPath = INFECTED_TEST_RATIO_FILENAME,
+
+tweet5<-updateStatus(text = "#COVID19 #CoronaVirusAt Datenupdate Österreich. Gesamtanzahl Tests. 4/7",
+                     mediaPath = NMB_TESTS_FILENAME,
                      inReplyTo=tweet4$id)
 
-
-tweet6<-updateStatus(text = "#COVID_19 #coronavirusat Datenupdate Österreich. Ländervergleich Sterbefälle Datenpunkte bis zum Vortag.",
-                     mediaPath = FILE_NAME_LOG_PLOT,
+tweet6<-updateStatus(text = "#COVID19 #CoronaVirusAt Datenupdate Österreich. Verhältnis Infektionen zu Tests. 5/7",
+                     mediaPath = INFECTED_TEST_RATIO_FILENAME,
                      inReplyTo=tweet5$id)
 
-tweet7<-updateStatus(text = "#COVID_19 #coronavirusat Datenupdate Österreich. Überblick (logarithmische Skala)",
-                     mediaPath = OVERVIEW_FILENAME,
+
+tweet7<-updateStatus(text = "#COVID19 #CoronaVirusAt Datenupdate Österreich. Ländervergleich Sterbefälle. Datenpunkte bis zum Vortag.",
+                     mediaPath = FILE_NAME_LOG_PLOT,
                      inReplyTo=tweet6$id)
 
-tweet8<-updateStatus(text = "#COVID_19 #coronavirusat #RStats Code for analysis of Austrian infection data here. https://github.com/joph/Covid19-Austria",
+tweet8<-updateStatus(text = "#COVID19 #CoronaVirusAt Datenupdate Österreich. Überblick (logarithmische Skala)",
+                     mediaPath = OVERVIEW_FILENAME,
                      inReplyTo=tweet7$id)
+
+tweet9<-updateStatus(text = "#COVID19 #CoronaVirusAt #RStats Code for analysis of Austrian infection data here. https://github.com/joph/Covid19-Austria",
+                     inReplyTo=tweet8$id)
 

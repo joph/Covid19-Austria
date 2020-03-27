@@ -26,6 +26,7 @@ PREDICTIONS_FILENAME<-"figures/covid19_predictions_comparison.png"
 GROWTH_RATE_FILENAME<-"figures/covid19_growth_rate.png"
 DOUBLING_FILENAME<-"figures/covid19_doubling.png"
 FILE_NAME_LOG_PLOT <-"figures/covid19_log.png"
+PREDICTION_QUALITY_FILENAME <- "figures/covid19_prediction_quality.png"
 
 ### source eurostat
 INHABITANTS_ITALY <- 60.48*10^6
@@ -34,10 +35,9 @@ INHABITANTS_ITALY <- 60.48*10^6
 INHABITANTS_AUSTRIA <- 8.82*10^6
 
 download_international_cases<-function(){
-
-  confirmed<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv"
-  dead<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv"
-  recovered<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv"
+  confirmed<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+  dead<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"
+  recovered<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv"
 
   download.file(confirmed,
                 "data/global_confirmed.csv")
@@ -165,18 +165,23 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
   names(wikipedia_table_clean)<-c("Datum",
                                 "NOE",	"W",	"St",	"T",	"O?",	"S",	"B",	"V",	"K",
                                 "Infektionen kumuliert",
-                                "Aktuell Infizierte",
-                                "Genesen kumuliert",
+                                #"Aktuell Infizierte",
+                                #"Genesen kumuliert",
                                 "Todesf?lle kumuliert",
                                 "Neuinfektionen",
-                                "Zuwachs",
-                                "Zuwachs1")
+                                "Zuwachs")
 
 
   wikipedia_table_1 <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[3]]
 
-  wikipedia_table_clean$`Testungen kumuliert`<-tibble(t=(c((wikipedia_table_1$`Tests aufsummiert`))))$t
+  wikipedia_table_clean$`Testungen kumuliert`<-tibble(t=c(wikipedia_table_1$`Tests aufsummiert`))[1:nrow(wikipedia_table_clean),]$t
 
+  wikipedia_table_2 <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[4]]
+
+  wikipedia_table_2 <- wikipedia_table_2[-1, ]
+  names(wikipedia_table_2)[10]<-"Bundesweit"
+
+  wikipedia_table_clean$`Genesen kumuliert`<-tibble(t=c(wikipedia_table_2$Bundesweit))[1:nrow(wikipedia_table_clean),]$t
 
   wikipedia_table_clean <- wikipedia_table_clean %>%
     mutate(Datum = str_replace(Datum, "[\\(]","")) %>%
@@ -244,12 +249,11 @@ scrape_wikipedia_at_states<-function(wikipedia_url = WIKIPEDIA_URL_AT){
   names(wikipedia_table_clean)<-c("Datum",
                                   "B",	"K",	"NOE",	"OOE",	"S",	"St",	"T_",	"V",	"W",
                                   "Infektionen kumuliert",
-                                  "Aktuell Infizierte",
-                                  "Genesen kumuliert",
+                                  #"Aktuell Infizierte",
+                                  #"Genesen kumuliert",
                                   "Todesf?lle kumuliert",
                                   "Neuinfektionen",
-                                  "Zuwachs",
-                                  "Zuwachs1")
+                                  "Zuwachs")
 
   wikipedia_table_clean <- wikipedia_table_clean %>%
     mutate(Datum = str_replace(Datum, "[\\(]","")) %>%
@@ -279,6 +283,15 @@ scrape_wikipedia_at_states<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 
   return(state_data)
 
+}
+
+get_infected<-function(db,
+                       region){
+  db <- db %>%
+    filter(Region == region) %>%
+    filter(Type == "Infected")
+
+  return(db)
 }
 
 get_growth<-function(db,
@@ -363,7 +376,8 @@ log_plot<-function(db,
   p <- db %>%
     ggplot(aes(x = Date, y = Cases_proportional)) +
     geom_line(aes(col = Region)) +
-    labs(caption = paste("Quelle: https://raw.githubusercontent.com/CSSEGISandData/COVID-19/", get_last_date(db))) +
+    labs(caption = paste("Quelle: https://raw.githubusercontent.com/CSSEGISandData/COVID-19/ Letzter Datenpunkt: " ,
+                         get_last_date(db))) +
     ylab(lab) +
     scale_y_log10() +
     scale_color_manual(values = COLORS) +
@@ -462,8 +476,7 @@ manual_data_entry<-function(db,
 #' @examples
 #' get_last_date(scrape_wikipedia_at()[[1]])
 get_last_date<-function(db){
-
-  return(db$Date[nrow(db)])
+  return(max(db$Date))
 
 }
 
@@ -880,3 +893,109 @@ plot_number_tests<-function(db,
 
   p
 }
+
+
+read_prediction<-function(date, real_cases){
+
+    file<-paste0("data/prediction",
+                 date,
+                 ".csv")
+
+    res<-read_delim(file,
+                    delim = ";") %>%
+      mutate(prediction_date = date)
+
+   names(res) <- c("Date",
+                       "Polynomielles Modell",
+                       "Italienmodell",
+                       "Exponential",
+                       "Observations",
+                   "Prediction_Date")
+
+
+
+
+    return(res)
+
+
+
+}
+
+prediction_quality<-function(db,
+                             shift = 1,
+                             length = 6){
+
+
+  date <- Sys.Date() - shift
+
+  last_cases<-get_infected(db,
+                           "Austria") %>%
+    mutate(Date = as.Date(Date)) %>%
+    filter(Date == date)
+
+  cases <- last_cases$Cases[1]
+
+
+  dates <- seq(Sys.Date() - length - shift,
+               Sys.Date() - shift, 1)
+
+  data_real<-tibble(Date_Forecast=date,
+                    Prediction_Date = dates,
+                    Variable="Tatsächliche Fälle",
+                    Value = cases)
+
+
+  predictions<-mapply(read_prediction,
+         dates,
+         SIMPLIFY = FALSE) %>%
+    bind_rows() %>%
+    mutate(Date_Forecast = as.Date(Date))  %>%
+    filter(Date_Forecast == date) %>%
+    dplyr::select(-Date) %>%
+    gather(Variable,
+           Value,
+           -Date_Forecast,
+           -Prediction_Date) %>%
+    na.omit() %>%
+    bind_rows(data_real) %>%
+    filter(Variable != "Observations" & Variable != "Exponential")
+
+  p <- predictions %>%
+    spread(Variable, Value) %>%
+    mutate(`Polynomielles Modell` = na.approx(`Polynomielles Modell`)) %>%
+    ggplot(aes(x = Prediction_Date)) +
+    geom_line(aes(x = Prediction_Date,
+                  y = `Polynomielles Modell`,
+                  color = "Polynomielles Modell")) +
+    geom_line(aes(x = Prediction_Date,
+                  y = Italienmodell,
+                  color = "Italienmodell")) +
+    geom_line(aes(x = Prediction_Date,
+                  y = `Tatsächliche Fälle`,
+                  color = "Tatsächlicher Wert"),
+              size = 1.5) +
+    geom_ribbon(aes(ymax=`Polynomielles Modell`, ymin=Italienmodell),
+                alpha = 0.1)+
+    scale_color_manual(values = COLORS[c(7, 1, 9)]) +
+    xlab("Datum der Vorhersage") +
+    ylab("Getestete Individuen") +
+    ggtitle(paste0("Vorhersagequalität für Österreich für ", date)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(legend.title = element_blank())
+
+
+  ggsave(PREDICTION_QUALITY_FILENAME,
+         p,
+         width = 10,
+         height = 5)
+
+  p
+
+
+
+
+
+
+}
+
+
