@@ -12,6 +12,7 @@ devtools::install_github("joph/covid19at")
 
 ## Example script
 See run_analysis.R for Austria
+
 See run_analysis_brazil.R for Brazil
 
 ### Creates among others, these figures
