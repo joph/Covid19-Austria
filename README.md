@@ -16,6 +16,8 @@ See run_analysis_brazil.R for Brazil
 
 ### Creates among others, these figures
 
+These figures may not be up-to-date! 
+
 <img src = "figures/covid19_growth_rate.png" width="600">
 <img src = "figures/covid19_doubling.png" width="600">
 <img src = "figures/covid19_infektionen.png" width="600">
