@@ -206,7 +206,9 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
     mutate(Datum = str_replace(Datum, "01\\.03\\.", "01.03. 08:00")) %>%
     mutate(Datum = str_replace(Datum, "02\\.03\\.", "02.03. 08:00")) %>%
     mutate(Datum = str_replace(Datum, "\\. ", ".2020 ")) %>%
-    mutate(Datum = as.POSIXct(Datum, format = "%d.%m.%Y %H:%M"))
+    mutate(Datum = as.POSIXct(Datum, format = "%d.%m.%Y %H:%M")) %>%
+    mutate(`Infektionen kumuliert` = str_replace(`Infektionen kumuliert`, "\\(e\\)", ""))
+
 
   wikipedia_table_clean <- wikipedia_table_clean %>%
     mutate(`Testungen kumuliert` = str_replace(`Testungen kumuliert`, "\\.", "")) %>%
@@ -337,7 +339,7 @@ plot_growth_data<-function(db,
 
   db<-db %>% filter(Cases > 0)
 
-  type_lng <- "Wachstumsrate Positiv \ngetestete Individuen"
+  type_lng <- "Wachstumsrate positiv \ngetestete Individuen"
 
   ylab_lng <- paste0("Tägliche Wachstumsrate\n",
          "(Geometrisches Mittel über ",
@@ -710,7 +712,7 @@ plot_prediction_combined<-function(db,
                                    type = "Infected"){
 
 
-  type_lng <- "Wachstumsrate Positiv \ngetestete Individuen"
+  type_lng <- "Wachstumsrate positiv \ngetestete Individuen"
 
   ylab_lng <- paste0("Anzahl positiv getesteter Individuen")
 
