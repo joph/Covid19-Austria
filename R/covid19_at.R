@@ -16,17 +16,17 @@ WIKIPEDIA_URL_AT <- "https://de.wikipedia.org/wiki/COVID-19-Pandemie_in_%C3%96st
 
 WIKIPEDIA_URL_IT <- "https://de.wikipedia.org/wiki/COVID-19-Epidemie_in_Italien"
 
-OVERVIEW_FILENAME <- "figures/covid19_infektionen.png"
-MODEL_FILENAME <- "figures/covid19_predictions.png"
-COMPARISON_AT_IT_FILENAME <- "figures/vergleich_at_it.png"
-INFECTED_TEST_RATIO_FILENAME <- "figures/covid19_infektionen_tests_ratio.png"
-NMB_TESTS_FILENAME <- "figures/covid19_anzahl_tests.png"
-COUNTRY_COMPARISON_FILENAME<-"figures/covid19_vergleich_laender.png"
-PREDICTIONS_FILENAME<-"figures/covid19_predictions_comparison.png"
-GROWTH_RATE_FILENAME<-"figures/covid19_growth_rate.png"
-DOUBLING_FILENAME<-"figures/covid19_doubling.png"
-FILE_NAME_LOG_PLOT <-"figures/covid19_log.png"
-PREDICTION_QUALITY_FILENAME <- "figures/covid19_prediction_quality.png"
+OVERVIEW_FILENAME <- "covid19_infektionen.png"
+MODEL_FILENAME <- "covid19_predictions.png"
+COMPARISON_AT_IT_FILENAME <- "vergleich_at_it.png"
+INFECTED_TEST_RATIO_FILENAME <- "covid19_infektionen_tests_ratio.png"
+NMB_TESTS_FILENAME <- "covid19_anzahl_tests.png"
+COUNTRY_COMPARISON_FILENAME<-"covid19_vergleich_laender.png"
+PREDICTIONS_FILENAME<-"covid19_predictions_comparison.png"
+GROWTH_RATE_FILENAME<-"covid19_growth_rate.png"
+DOUBLING_FILENAME<-"covid19_doubling.png"
+FILE_NAME_LOG_PLOT <-"covid19_log.png"
+PREDICTION_QUALITY_FILENAME <- "covid19_prediction_quality.png"
 
 overwrite_filenames<-function(country){
   covid19at::OVERVIEW_FILENAME <- paste0("figures/",country,"_covid19_infektionen.png")
@@ -125,7 +125,8 @@ download_international_cases<-function(){
 }
 
 plot_country_comparison<-function(db_,
-                             countries){
+                             countries,
+                             filename_add = ""){
 
   max_date <- db_ %>%
     filter(Region %in% countries) %>%
@@ -143,7 +144,8 @@ plot_country_comparison<-function(db_,
     labs(caption = paste("Quelle: https://raw.githubusercontent.com/CSSEGISandData/COVID-19/", ""))
 
 
-  ggsave(COUNTRY_COMPARISON_FILENAME,
+  ggsave(get_filename(COUNTRY_COMPARISON_FILENAME,
+                      filename_add),
          p)
 
   p
@@ -300,10 +302,11 @@ scrape_wikipedia_at_states<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 }
 
 get_infected<-function(db,
-                       region){
+                       region,
+                       type = "Infected"){
   db <- db %>%
     filter(Region == region) %>%
-    filter(Type == "Infected")
+    filter(Type == type)
 
   return(db)
 }
@@ -313,11 +316,9 @@ get_growth<-function(db,
   growth<-db %>%
     # first sort by year
     arrange(Date) %>%
-    mutate(Selector = ((n()-1):0) %% avg) %>%
-    filter(Selector == 0) %>%
-    mutate(Diff_date = as.numeric(Date - lag(Date)),  # Difference in time (just in case there are gaps)
-           Diff_growth = Cases - lag(Cases),
-           Lag_cases = lag(Cases),
+    mutate(Diff_date = as.numeric(Date - lag(Date, avg)),  # Difference in time (just in case there are gaps)
+           Diff_growth = Cases - lag(Cases, avg),
+           Lag_cases = lag(Cases, avg),
            Rate_percent = 100 * ((Cases /Lag_cases)^(1/Diff_date) - 1))   %>%
     dplyr::select(Date,
                   Diff_date,
@@ -331,16 +332,17 @@ get_growth<-function(db,
 plot_growth_data<-function(db,
                            region = "Austria",
                            avg = 5,
-                           language = "at"){
+                           language = "at",
+                           filename_add = ""){
 
   db<-db %>% filter(Cases > 0)
 
   type_lng <- "Wachstumsrate Positiv \ngetestete Individuen"
 
   ylab_lng <- paste0("Tägliche Wachstumsrate\n",
-         "(",
+         "(Geometrisches Mittel über ",
          avg,
-         "-Tagesdurchschnitt in %)")
+         " Tage in %)")
 
   caption_lng <- "Quelle: Wikipedia. Letzter Datenpunkt:"
 
@@ -351,7 +353,7 @@ plot_growth_data<-function(db,
     type_lng <- "Taxa de crescimento \ndos indivíduos com teste positivo"
 
     ylab_lng <- paste0("Taxa de crescimento diário\n",
-                       "(Média de crescimento de ",
+                       "(Média geométrico de ",
                        avg,
                        " dias em %)")
 
@@ -382,9 +384,10 @@ plot_growth_data<-function(db,
                     growth2)
 
   p <- growth %>%
+    na.omit() %>%
     ggplot(aes(x = Date, y = Rate_percent)) +
-    geom_bar(stat = "identity", aes(fill = Type), position = "dodge") +
-    scale_fill_manual(values = COLORS) +
+    geom_line(aes(col = Type)) +
+    scale_color_manual(values = COLORS) +
     ylab(ylab_lng) +
     labs(caption = paste(caption_lng,
                          get_last_date(db))) +
@@ -395,7 +398,8 @@ plot_growth_data<-function(db,
 
 
 
-  ggsave(GROWTH_RATE_FILENAME,
+  ggsave(get_filename(GROWTH_RATE_FILENAME,
+                       filename_add),
          p,
          width = 10,
          height = 5)
@@ -407,7 +411,8 @@ log_plot<-function(db,
                    variable = "Infected",
                    regions = c("Austria"),
                    lab = "Positiv getestete Individuen \n(% der Bevölkerung, Logarithmische Skala)",
-                   language = "at")  {
+                   language = "at",
+                   filename_add = "")  {
 
   db <- db %>%
     filter(Type == variable) %>%
@@ -437,7 +442,7 @@ log_plot<-function(db,
                           cex = 0.8)) +
     xlab(xlab_caption)
 
-  ggsave(FILE_NAME_LOG_PLOT,
+  ggsave(get_filename(FILE_NAME_LOG_PLOT, filename_add),
          p)
 
   p
@@ -450,42 +455,68 @@ log_plot<-function(db,
 plot_doubling_time<-function(db,
                              region = "Austria",
                              avg = 5,
-                             language = "at"){
+                             language = "at",
+                             filename_add = ""){
 
 
   db<-db %>% filter(Cases > 0)
 
-  ylab_lng <- paste0("Tägliche Wachstumsrate\n",
-                     "(",
+  ylab_lng <- paste0("Verdopplungszeit \n(Geometrisches Mittel über ",
                      avg,
-                     "-Tagesdurchschnitt in %)")
+                     " Tage in Tagen)")
 
   caption_lng <- "Quelle: Wikipedia. Letzter Datenpunkt:"
 
   date_lng <- "Datum"
 
+  type_lng <- "Positiv getestete Individuen"
+
   if(language == "br"){
 
     ylab_lng <- paste0("Dias até indivíduos com \nteste positivo dobram\n",
-                       "(Média de  ",
+                       "(Média geométrica de  ",
                        avg,
-                       " dias)")
+                       " dias em %)")
 
     caption_lng <- "Fonte: https://raw.githubusercontent.com/CSSEGISandData/COVID-19/. Último ponto de dados:"
     date_lng <- "Data"
+
+    type_lng <- "Indivíduos com teste positivo"
+
   }
 
-  db<-get_infected(db,
+  db1<-get_infected(db,
                   region)
 
-  growth <- get_growth(db,
-                       avg) %>%
-  mutate(Doubling = log(2) /log(1+Rate_percent/100))
+  growth1<-get_growth(db1,
+                      avg) %>%
+    mutate(Type = type_lng) %>%
+    mutate(Doubling = log(2) /log(1+Rate_percent/100))
+
+  db2<-db %>%
+    filter(Region == region) %>%
+    filter(Type == "Nmb_Tested")
+
+  growth2<-NULL
+
+  if(nrow(db2) > 0){
+    growth2<-get_growth(db2,
+                        avg) %>%
+      mutate(Type = "Anzahl Tests") %>%
+      mutate(Doubling = log(2) /log(1+Rate_percent/100))
+  }
+
+  growth<-bind_rows(growth1,
+                    growth2)
+
+
 
 
 p<-growth %>%
+  na.omit() %>%
   ggplot(aes(x = Date, y = Doubling)) +
-  geom_bar(stat = "identity", fill = COLORS[1]) +
+  geom_line(aes(color = Type)) +
+  scale_color_manual(values = COLORS) +
   ylab(ylab_lng) +
   labs(caption = paste(caption_lng, get_last_date(db))) +
   ggtitle(region) +
@@ -493,7 +524,8 @@ p<-growth %>%
   xlab(date_lng)
 
 
-ggsave(DOUBLING_FILENAME,
+ggsave(get_filename(DOUBLING_FILENAME,
+                     filename_add),
        p,
        width = 10,
        height = 5)
@@ -583,7 +615,8 @@ get_first_date<-function(db){
 #' plot_overiew_at(scrape_wikipedia_at()[[1]])
 plot_overview<-function(db,
                         region = "Austria",
-                        language = "at") {
+                        language = "at",
+                        filename_add = "") {
 
 
   caption_lng <- "Quelle: Wikipedia. Letzter Datenpunkt:"
@@ -619,7 +652,8 @@ plot_overview<-function(db,
     scale_y_log10() +
     xlab(date_lng)
 
-  ggsave(OVERVIEW_FILENAME,
+  ggsave(get_filename(OVERVIEW_FILENAME,
+                       filename_add),
          p,
          width = 10,
          height = 5)
@@ -672,7 +706,8 @@ plot_prediction_combined<-function(db,
                                    colors_in = COLORS,
                                    log_scale = FALSE,
                                    filename_add = "",
-                                   language = "at"){
+                                   language = "at",
+                                   type = "Infected"){
 
 
   type_lng <- "Wachstumsrate Positiv \ngetestete Individuen"
@@ -689,12 +724,14 @@ plot_prediction_combined<-function(db,
 
   observations_lng <- "Beobachtungen"
 
+  mod_exp_lng <- "Exponentielles Modell"
+
   if(language == "br"){
 
-    type_lng <- "Número de indivíduos com teste positivo"
+    type_lng <- "Número de indivíduos mortos"
     model_us <- "Estados Unidos "
 
-    ylab_lng <- paste0("Número de indivíduos com teste positivo")
+    ylab_lng <- paste0("Número de indivíduos mortos")
 
     model_name_region <- paste0(region2, " (com atraso de ",delay," dias)")
 
@@ -704,6 +741,8 @@ plot_prediction_combined<-function(db,
     date_lng <- "Data"
 
     observations_lng <- "Observações"
+
+    mod_exp_lng <- "Modelo exponencial"
   }
 
   week_ahead <- data.frame(Date = c(db$Date %>% unique(),
@@ -721,10 +760,12 @@ plot_prediction_combined<-function(db,
     unlist()
 
   db <- get_infected(db,
-                     region1)
+                     region1,
+                     type)
 
   db2 <- get_infected(db_international,
-                      region2)
+                      region2,
+                      type)
 
   base_data <- db %>%
     dplyr::select(Date,
@@ -757,7 +798,7 @@ plot_prediction_combined<-function(db,
   results <- generic_mod(db_exp,
                          0,
                          week_ahead,
-                         "Exponentielles Modell") %>%
+                         mod_exp_lng) %>%
     mutate(fitted = exp(fitted),
            Size = 1) %>%
     bind_rows(generic_mod(
@@ -806,10 +847,17 @@ plot_prediction_combined<-function(db,
         #round(estimates_ahead$res[3])
   )
 
+  if(exp){
+    caption_lng <- paste0(caption_lng,
+           "\nExponentielles Modell: ",
+           round(estimates_ahead$res[3]))
+
+  }
+
   if(language == "br"){
    caption_lng <- paste("Fonte: https://raw.githubusercontent.com/CSSEGISandData/COVID-19/ Último ponto de dados:",
           get_last_date(db),
-          "\nProjeção de indivíduos com teste positivo no ", final_date, "\nModelo polinomial: ",
+          "\nProjeção de indivíduos mortos no ", final_date, "\nModelo polinomial: ",
           round(estimates_ahead$res[3]),
           "\n",
           model_name_region,
@@ -818,6 +866,13 @@ plot_prediction_combined<-function(db,
           #"\nExponentielles Modell: ",
           #round(estimates_ahead$res[3])
     )
+
+   if(exp){
+     caption_lng <- paste0(caption_lng,
+            "\nModelo exponencial: ",
+            round(estimates_ahead$res[4]))
+
+   }
   }
 
   p <- results %>%
@@ -838,7 +893,9 @@ plot_prediction_combined<-function(db,
 
   }
 
-  ggsave(PREDICTIONS_FILENAME,
+  print(paste0(filename_add, PREDICTIONS_FILENAME))
+
+  ggsave(get_filename(PREDICTIONS_FILENAME, filename_add),
          p,
          width = 10,
          height = 5)
@@ -847,6 +904,12 @@ plot_prediction_combined<-function(db,
 
 
 
+
+}
+
+get_filename<-function(filename, add = ""){
+
+  paste0("figures/", add, filename) %>% return()
 
 }
 
@@ -876,7 +939,8 @@ plot_prediction<-function(db,
                           transformation_f = log,
                           transformation_f_inverse = exp,
                           add_string =  " (exponentielles Modell M1): ",
-                          region = "Austria"){
+                          region = "Austria",
+                          filename_add = ""){
 
   db<-get_infected(db,
                    region)
@@ -931,7 +995,8 @@ plot_prediction<-function(db,
     theme(plot.title = element_text(hjust = 0.5))
 
 
-  ggsave(MODEL_FILENAME,
+  ggsave(get_filename(MODEL_FILENAME,
+                      filename_add),
          p,
          width = 10,
          height = 5)
@@ -1128,7 +1193,8 @@ prediction_quality<-function(db,
     theme(legend.title = element_blank())
 
 
-  ggsave(PREDICTION_QUALITY_FILENAME,
+  ggsave(get_filename(PREDICTION_QUALITY_FILENAME,
+                      filename_add),
          p,
          width = 10,
          height = 5)
