@@ -23,5 +23,6 @@ Imports:
     lubridate,
     wbstats,
     readr,
-    directlabels
+    directlabels,
+    zoo
 RoxygenNote: 7.0.2
