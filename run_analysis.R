@@ -4,6 +4,8 @@ library(tidyverse)
 library(twitteR)
 library(feather)
 library(directlabels)
+library(drc)
+
 
 theme_set(theme_classic(base_size = 16))
 
@@ -11,53 +13,33 @@ update_geom_defaults("line", list(size = 1.2))
 
 Sys.setlocale("LC_ALL", "German")
 
-state_data <- scrape_wikipedia_at_states() %>%
-  bind_rows(tibble(Date = rep(as.POSIXct("2020-03-23 22:00:00"), 9),
-            State = c("Niederösterreich",
-                      "Wien",
-                      "Steiermark",
-                      "Tirol",
-                      "Oberösterreich",
-                      "Salzburg",
-                      "Burgenland",
-                      "Vorarlberg",
-                      "Kärnten"),
-            Infected = c(609,
-                         559,
-                         503,
-                         1069,
-                         762,
-                         404,
-                         85,
-                         352,
-                         135)))
 
-state_data %>%
-  ggplot(aes(x = Date, y = Infected)) +
-  geom_line(aes(col=State)) +
-  scale_y_log10() +
-  scale_x_discrete(expand=c(0, 1000000)) +
-  geom_dl(aes(label = State, col = State),
-          method = list(dl.combine("last.points"),
-                        cex = 0.8)) +
-  scale_color_manual(values = COLORS)
-
-ggsave("figures/states.png")
-
-#db_at <- scrape_wikipedia_at()
-db_at <- read_feather("data/database.feather") %>%
-  as_tibble()
+db_at <- scrape_wikipedia_at()
+#db_at <- read_feather("data/database.feather") %>%
+#  as_tibble()
 db_international <- download_international_cases()
 
 db_at <- db_at %>%
-  filter(Date < as.POSIXct("2020-03-29 00:00:00"))
+  filter(Date < as.POSIXct("2020-03-31 01:00:00"))
 
 db_at <- manual_data_entry(db_at,
-                           date = as.POSIXct("2020-03-29 15:00:00"),
-                           cases_infected_cum = 8536,
-                           cases_dead_cum = 86,
-                           cases_recovered_cum = 9,
-                           tests = 46441)
+                           date = as.POSIXct("2020-03-31 11:00:00"),
+                           #8958
+                           cases_infected_cum = 9825,
+                           cases_dead_cum = 128,
+                           cases_recovered_cum = 1095,
+                           tests = 52344,
+                           hospital = 1110,
+                           intensive = 198)
+
+
+####try logistic curve
+infected <- get_infected(db_at,
+                         "Austria")
+mL <- drm(Cases ~ Date, data = infected, fct = L.3(), type = "continuous")
+summary(mL)
+plot(mL)
+
 
 ###bis 29.3., 10:00
 
@@ -105,7 +87,7 @@ plot_growth_data(db_international,
 
 
 plot_growth_data(db_at,
-                 avg = 7)
+                 avg = 6)
 
 plot_doubling_time(db_international,
                    "Italy",
@@ -120,11 +102,11 @@ plot_overview(db_at)
 
 plot_prediction_combined(db_at,
                          db_international,
-                         Sys.Date() + 8,
+                         Sys.Date() + 6,
                          region1 = "Austria",
                          region2 = "Italy",
                          delay = 8,
-                         polynom = 7,
+                         polynom = 4,
                          exp = FALSE,
                          limDate = Sys.Date() - 16,
                          colors = COLORS[c(1, 7, 9)],
@@ -136,7 +118,7 @@ plot_prediction_combined(db_at,
                          region1 = "Austria",
                          region2 = "Italy",
                          delay = 16,
-                         polynom = 7,
+                         polynom = 6,
                          exp = FALSE,
                          limDate = Sys.Date() - 16,
                          colors = COLORS[c(1, 7, 9)],
@@ -154,8 +136,8 @@ plot_prediction(db_at,
 
 
 prediction_quality(db_at,
-                   1,
-                   6)
+                   0,
+                   5)
 
 
 authentification <- feather("authentification")
@@ -181,8 +163,8 @@ tweet3<-updateStatus(text = "#COVID19 #CoronaVirusAt Datenupdate Österreich. Wa
 
 tweet4<-updateStatus(text = "#COVID19 #CoronaVirusAt Datenupdate Österreich. Dauer Verdopplungen der Infektionen in Tagen.",
                      mediaPath = get_filename(DOUBLING_FILENAME, "")
-                     #,
-                     #inReplyTo=tweet3$id
+                     ,
+                     inReplyTo=tweet3$id
                      )
 
 
@@ -211,6 +193,5 @@ tweet9<-updateStatus(text = "#COVID19 #CoronaVirusAt Datenupdate Österreich. Mo
 
 tweet10<-updateStatus(text = "#COVID19 #CoronaVirusAt #RStats Code for analysis of Austrian infection data here. https://github.com/joph/Covid19-Austria 9/9",
                      inReplyTo=tweet9$id)
-
 
 
