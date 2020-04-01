@@ -732,12 +732,19 @@ get_first_date<-function(db){
 plot_overview<-function(db,
                         region = "Austria",
                         language = "at",
-                        filename_add = "") {
+                        filename_add = "",
+                        diff = FALSE,
+                        log_scale = TRUE,
+                        roll_mean_length = 1) {
 
 
   caption_lng <- "Quelle: Wikipedia. Letzter Datenpunkt:"
 
   ylab_lng <- "Individuen \n(logarithmische Skala)"
+
+  if(!log_scale){
+    ylab_lng <- "Individuen"
+  }
 
   date_lng <- "Datum"
 
@@ -749,14 +756,37 @@ plot_overview<-function(db,
     date_lng <- "Data"
   }
 
+  types <-  c("Infected",
+              "Dead",
+              "In_Hospital",
+              "Intensive_Care",
+              "Recovered")
+
+  if(!diff){
+    types <- c(types,
+               "Currently_Ill"
+    )
+  }
+
+  types <- c("Infected")
+
   db<-db %>%
       filter(Region == region) %>%
-      filter(Type %in% c("Infected",
-                         "Recovered",
-                         "Dead",
-                         "In_Hospital",
-                         "Intensive_Care",
-                         "Currently_Ill"))
+      filter(Type %in% types)
+
+
+  if(diff){
+    db <- db %>%
+      group_by(Type) %>%
+      mutate(Cases = c(0, diff(Cases))) %>%
+      mutate(Cases = rollmean(Cases,
+                              roll_mean_length,
+                              na.pad=TRUE)) %>%
+      ungroup()
+
+    ylab_lng <- "Positiv geteste Individuen \n(Individuen/Tag - 7-Tages Durchschnitt)"
+
+  }
 
   db <- db %>%
     mutate(Type = ifelse(Type == "Infected", "Positiv getestet", Type)) %>%
@@ -780,8 +810,12 @@ plot_overview<-function(db,
     labs(caption = paste(caption_lng, get_last_date(db))) +
     ggtitle(region) +
     theme(plot.title = element_text(hjust = 0.5)) +
-    scale_y_log10() +
+
     xlab(date_lng)
+
+  if(log_scale){
+    p <- p + scale_y_log10()
+  }
 
   ggsave(get_filename(OVERVIEW_FILENAME,
                        filename_add),
