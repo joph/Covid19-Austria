@@ -174,7 +174,7 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 
   webpage <- xml2::read_html(wikipedia_url)
 
-  wikipedia_table <- rvest::html_table(webpage, fill = TRUE)[[6]]
+  wikipedia_table <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[6]]
 
   wikipedia_table_clean <- wikipedia_table[-1,]
 
@@ -187,6 +187,10 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
                                 "Neuinfektionen",
                                 "Zuwachs")
 
+  wikipedia_table_clean<- wikipedia_table_clean %>%
+    mutate(`Infektionen kumuliert` = str_replace(wikipedia_table_clean$`Infektionen kumuliert`, "\\.", ""))   %>%
+    mutate(`Infektionen kumuliert` = as.numeric(`Infektionen kumuliert`))
+
 
   wikipedia_table_1 <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[9]]
 
@@ -197,6 +201,11 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
   wikipedia_table_2 <- wikipedia_table_2[-1, c(1, 11)]
   names(wikipedia_table_2)[1]<-"Datum"
   names(wikipedia_table_2)[2]<-"Bundesweit"
+
+  wikipedia_table_2 <- wikipedia_table_2 %>%
+    mutate(Bundesweit = str_replace(wikipedia_table_2$Bundesweit, "\\.", ""))   %>%
+    mutate(Bundesweit = as.numeric(Bundesweit))
+
 
   wikipedia_table_2 <- wikipedia_table_2 %>%
     clean_date()
@@ -306,6 +315,7 @@ clean_date<-function(db){
     mutate(Datum = str_replace(Datum, "24\\.03\\.$", "24.03. 08:00")) %>%
     mutate(Datum = str_replace(Datum, "\\. ", ".2020 ")) %>%
     mutate(Datum = str_replace(Datum, "03 ","03.2020 ")) %>%
+    mutate(Datum = str_replace(Datum, "04 ","04.2020 ")) %>%
     mutate(Datum = as.POSIXct(Datum, format = "%d.%m.%Y %H:%M")) %>%
     return()
 }
@@ -397,7 +407,7 @@ plot_growth_data<-function(db,
 
   db<-db %>% filter(Cases > 0)
 
-  type_lng <- "Positiv \ngetestete Individuen"
+  type_lng <- "Positiv getestete \nIndividuen (kumulativ)"
 
   ylab_lng <- paste0("Tägliche Wachstumsrate\n",
          "(Geometrisches Mittel über ",
@@ -437,7 +447,7 @@ plot_growth_data<-function(db,
   if(nrow(db2) > 0){
   growth2<-get_growth(db2,
                       avg) %>%
-    mutate(Type = "Anzahl Tests")
+    mutate(Type = "Anzahl Tests \n(kumulativ)")
   }
 
   db3<-db %>%
@@ -449,7 +459,7 @@ plot_growth_data<-function(db,
   if(nrow(db3) > 0){
     growth3<-get_growth(db3,
                         avg) %>%
-      mutate(Type = "Hospitalisierte")
+      mutate(Type = "Hospitalisierte \n(Aktuell)")
   }
 
   db4<-db %>%
@@ -461,7 +471,7 @@ plot_growth_data<-function(db,
   if(nrow(db4) > 0){
     growth4<-get_growth(db4,
                         avg) %>%
-      mutate(Type = "Intensivstation")
+      mutate(Type = "Intensivstation \n(Aktuell)")
   }
 
   db5<-db %>%
@@ -472,7 +482,7 @@ plot_growth_data<-function(db,
 
   if(nrow(db5) > 0){
 
-    lng <- "Verstorbene"
+    lng <- "Verstorbene\n(kumulativ)"
 
     if(language == "br"){
       lng <- "Mortos"
@@ -483,25 +493,47 @@ plot_growth_data<-function(db,
       mutate(Type = lng)
   }
 
+  db6<-db %>%
+    filter(Region == region) %>%
+    filter(Type == "Currently_Ill")
+
+  growth6<-NULL
+
+  if(nrow(db6) > 0){
+
+    lng <- "Erkrankte\n(Aktuell)"
+
+    if(language == "br"){
+      lng <- "Doentes no momento"
+    }
+
+    growth6<-get_growth(db6,
+                        avg) %>%
+      mutate(Type = lng)
+  }
+
 
     growth<-bind_rows(growth1,
                     growth2,
                     growth3,
                     growth4,
-                    growth5)
+                    growth5,
+                    growth6)
 
   p <- growth %>%
     na.omit() %>%
     ggplot(aes(x = Date, y = Rate_percent)) +
+    geom_hline(yintercept = 7, linetype = 2) +
+    geom_hline(yintercept = 10, linetype = 2) +
     geom_line(aes(col = Type)) +
-    scale_color_manual(values = COLORS[c(1, 2, 5, 9, 10)]) +
+    scale_color_manual(values = COLORS) +
     ylab(ylab_lng) +
     labs(caption = paste(caption_lng,
                          get_last_date(db))) +
     ggtitle(region) +
     theme(plot.title = element_text(hjust = 0.5)) +
-    xlab(date_lng)
-
+    xlab(date_lng) +
+    ylim(c(0, 50))
 
 
 
@@ -510,7 +542,7 @@ plot_growth_data<-function(db,
          p,
          width = 10,
          height = 5)
-  p
+  return(list(p, growth))
 
 }
 
@@ -756,19 +788,27 @@ plot_overview<-function(db,
     date_lng <- "Data"
   }
 
-  types <-  c("Infected",
-              "Dead",
-              "In_Hospital",
-              "Intensive_Care",
-              "Recovered")
+
+
+
+
+  types <- c("Infected",
+             "Dead",
+             "In_Hospital",
+             "Intensive_Care",
+             "Currently_Ill")
 
   if(!diff){
+    types1 <-  c("Infected",
+                "Dead",
+                "In_Hospital",
+                "Intensive_Care",
+                "Recovered")
+
     types <- c(types,
-               "Currently_Ill"
+               types1
     )
   }
-
-  types <- c("Infected")
 
   db<-db %>%
       filter(Region == region) %>%
@@ -781,10 +821,11 @@ plot_overview<-function(db,
       mutate(Cases = c(0, diff(Cases))) %>%
       mutate(Cases = rollmean(Cases,
                               roll_mean_length,
-                              na.pad=TRUE)) %>%
+                              na.pad=TRUE,
+                              align = "right")) %>%
       ungroup()
 
-    ylab_lng <- "Positiv geteste Individuen \n(Individuen/Tag - 7-Tages Durchschnitt)"
+    ylab_lng <- "Individuen \n(Individuen/Tag - 7-Tages Durchschnitt)"
 
   }
 
@@ -805,7 +846,7 @@ plot_overview<-function(db,
     ggplot(aes(x = Date, y = Cases)) +
     geom_point(aes(col = Type)) +
     geom_line(aes(col = Type))  +
-    scale_color_manual(values = COLORS[c(1, 3, 5, 6, 9, 10)]) +
+    scale_color_manual(values = COLORS[c(1, 2, 5, 6, 9, 10)]) +
     ylab(ylab_lng) +
     labs(caption = paste(caption_lng, get_last_date(db))) +
     ggtitle(region) +
@@ -1200,6 +1241,7 @@ plot_infected_tests_ratio<-function(db,
     mutate(Infected_Ind = c(first_value_infected, diff(Infected))) %>%
     dplyr::select(Date, Nmb_Tested, Tests_Ind, Infected_Ind) %>%
       mutate(Prop_Infected_Tests = 100 * Infected_Ind/Tests_Ind) %>%
+    na.omit() %>%
     ggplot(aes(x = Date, y = Prop_Infected_Tests)) +
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1]) +
