@@ -27,6 +27,7 @@ GROWTH_RATE_FILENAME<-"covid19_growth_rate.png"
 DOUBLING_FILENAME<-"covid19_doubling.png"
 FILE_NAME_LOG_PLOT <-"covid19_log.png"
 PREDICTION_QUALITY_FILENAME <- "covid19_prediction_quality.png"
+TEST_SHARE_FILENAME <- "covid19_test_share.png"
 
 overwrite_filenames<-function(country){
   covid19at::OVERVIEW_FILENAME <- paste0("figures/",country,"_covid19_infektionen.png")
@@ -111,7 +112,7 @@ download_international_cases<-function(){
     na.omit() %>%
     mutate(Population = value) %>%
     dplyr::select(-value) %>%
-    mutate(Cases_proportional = Cases/Population) %>%
+    mutate(Cases_proportional = 100 * Cases/Population) %>%
 
     mutate(Date = as.POSIXct(paste0(Date, " 00:00:00"))) %>%
     dplyr::select(Region,
@@ -181,10 +182,13 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
   names(wikipedia_table_clean)<-c("Datum",
                                 "NOE",	"W",	"St",	"T",	"O?",	"S",	"B",	"V",	"K",
                                 "Infektionen kumuliert",
+                                "Neuinfektionen",
+
                                 #"Aktuell Infizierte",
                                 #"Genesen kumuliert",
                                 "Todesf?lle kumuliert",
-                                "Neuinfektionen",
+                                "Genesene kumuliert",
+                                "Aktive Infektionen",
                                 "Zuwachs")
 
   wikipedia_table_clean<- wikipedia_table_clean %>%
@@ -192,11 +196,23 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
     mutate(`Infektionen kumuliert` = as.numeric(`Infektionen kumuliert`))
 
 
-  wikipedia_table_1 <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[9]]
+  nmb_tests <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[10]]
 
-  wikipedia_table_clean$`Testungen kumuliert`<-tibble(t=c(wikipedia_table_1$`Tests aufsummiert`))[1:nrow(wikipedia_table_clean),]$t
+  names(nmb_tests)[1]<-"Datum"
+  names(nmb_tests)[3]<-"Tests"
 
-  wikipedia_table_2 <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[12]]
+  nmb_tests <- nmb_tests %>%
+    clean_date() %>%
+    mutate(Tests = str_replace(nmb_tests$Tests, "\\.", ""))   %>%
+    mutate(Tests = str_replace(nmb_tests$Tests, "\\(a\\)", ""))    %>%
+    mutate(Tests = str_replace(Tests, "\\(a\\)", "")) %>%
+    mutate(Tests = str_replace(Tests, "\\.", "")) %>%
+    mutate(Tests = as.numeric(Tests)) %>%
+    mutate(D = as.Date(Datum))
+
+#  wikipedia_table_clean$`Testungen kumuliert`<-tibble(t=c(wikipedia_table_1$`Tests aufsummiert`))[1:nrow(wikipedia_table_clean),]$t
+
+  wikipedia_table_2 <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[13]]
 
   wikipedia_table_2 <- wikipedia_table_2[-1, c(1, 11)]
   names(wikipedia_table_2)[1]<-"Datum"
@@ -214,7 +230,7 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
     mutate(D = as.Date(Datum))
 
 
-  In_Hospital <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[10]]
+  In_Hospital <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[11]]
 
   In_Hospital <- In_Hospital[-1, c(1, 11)]
   names(In_Hospital)[1]<-"Datum"
@@ -227,7 +243,7 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
     mutate(D = as.Date(Datum))
 
 
-  Intensive_Care <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[11]]
+  Intensive_Care <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[12]]
 
   Intensive_Care <- Intensive_Care[-1, c(1, 11)]
   names(Intensive_Care)[1]<-"Datum"
@@ -254,6 +270,11 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
                                      by = c("D" = "D")) %>%
     mutate(Datum = Datum.x)
 
+  wikipedia_table_clean <- full_join(wikipedia_table_clean,
+                                     nmb_tests,
+                                     by = c("D" = "D")) %>%
+    mutate(Datum = Datum.x)
+
   wikipedia_table_clean <- full_join(wikipedia_table_clean, In_Hospital, by = c("D" = "D")) %>%
     mutate(Datum = Datum.x)
 
@@ -262,9 +283,7 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 
 
   wikipedia_table_clean <- wikipedia_table_clean %>%
-    mutate(`Testungen kumuliert` = str_replace(`Testungen kumuliert`, "\\.", "")) %>%
-    mutate(`Testungen kumuliert` = str_replace(`Testungen kumuliert`, "\\[.*\\]", "")) %>%
-    mutate() %>%
+
     as_tibble()
 
 
@@ -285,7 +304,7 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
                   Recovered = `Bundesweit`,
                   In_Hospital = Hospitalisiert,
                   Intensive_Care = Intensive_Care,
-                  Nmb_Tested = `Testungen kumuliert`,
+                  Nmb_Tested = Tests,
                   Population,
                   Currently_Ill) %>%
     gather(Type,
@@ -293,7 +312,7 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
            -Region,
            -Date,
            -Population) %>%
-    mutate(Cases_proportional = Cases / INHABITANTS_AUSTRIA) %>%
+    mutate(Cases_proportional = 100 * Cases / INHABITANTS_AUSTRIA) %>%
     na.omit()
 
 
@@ -447,7 +466,7 @@ plot_growth_data<-function(db,
   if(nrow(db2) > 0){
   growth2<-get_growth(db2,
                       avg) %>%
-    mutate(Type = "Anzahl Tests \n(kumulativ)")
+    mutate(Type = "Anzahl Tests\n(Täglich)")
   }
 
   db3<-db %>%
@@ -459,7 +478,7 @@ plot_growth_data<-function(db,
   if(nrow(db3) > 0){
     growth3<-get_growth(db3,
                         avg) %>%
-      mutate(Type = "Hospitalisierte \n(Aktuell)")
+      mutate(Type = "Hospitalisierte \n(Täglich)")
   }
 
   db4<-db %>%
@@ -471,7 +490,7 @@ plot_growth_data<-function(db,
   if(nrow(db4) > 0){
     growth4<-get_growth(db4,
                         avg) %>%
-      mutate(Type = "Intensivstation \n(Aktuell)")
+      mutate(Type = "Intensivstation \n(Täglich)")
   }
 
   db5<-db %>%
@@ -501,7 +520,7 @@ plot_growth_data<-function(db,
 
   if(nrow(db6) > 0){
 
-    lng <- "Erkrankte\n(Aktuell)"
+    lng <- "Erkrankte\n(Täglich)"
 
     if(language == "br"){
       lng <- "Doentes no momento"
@@ -525,6 +544,7 @@ plot_growth_data<-function(db,
     ggplot(aes(x = Date, y = Rate_percent)) +
     geom_hline(yintercept = 7, linetype = 2) +
     geom_hline(yintercept = 10, linetype = 2) +
+    geom_hline(yintercept = 0, linetype = 2) +
     geom_line(aes(col = Type)) +
     scale_color_manual(values = COLORS) +
     ylab(ylab_lng) +
@@ -532,9 +552,9 @@ plot_growth_data<-function(db,
                          get_last_date(db))) +
     ggtitle(region) +
     theme(plot.title = element_text(hjust = 0.5)) +
-    xlab(date_lng) +
-    ylim(c(0, 50))
-
+    xlab(date_lng)
+  #+
+  #  ylim(c(-26, 50))
 
 
   ggsave(get_filename(GROWTH_RATE_FILENAME,
@@ -549,7 +569,7 @@ plot_growth_data<-function(db,
 log_plot<-function(db,
                    variable = "Infected",
                    regions = c("Austria"),
-                   lab = "Positiv getestete Individuen \n(% der Bevölkerung, Logarithmische Skala)",
+                   lab = "Positiv getestete Individuen \n(% der Bevölkerung)",
                    language = "at",
                    filename_add = "")  {
 
@@ -557,7 +577,7 @@ log_plot<-function(db,
     filter(Type == variable) %>%
     filter(Region %in% regions)
 
-  source <- paste("Quelle: Wikipedia. Letzter Datenpunkt: " ,
+  source <- paste("Quelle: https://raw.githubusercontent.com/CSSEGISandData/COVID-19/. Letzter Datenpunkt: " ,
                   get_last_date(db))
 
   xlab_caption <- "Datum"
@@ -568,14 +588,23 @@ log_plot<-function(db,
     xlab_caption <- "Data"
   }
 
+  db_new <- tibble(Region = "",
+                   Date = Sys.time() + 12*24*3600,
+                   Population = 0,
+                   Type = variable,
+                   Cases = 0,
+                   Cases_proportional = 0)
+  db<-bind_rows(db,
+                db_new)
+
   p <- db %>%
     ggplot(aes(x = Date, y = Cases_proportional)) +
     geom_line(aes(col = Region)) +
     labs(caption = source) +
     ylab(lab) +
-    scale_y_log10() +
+    #scale_y_log10() +
     scale_color_manual(values = COLORS) +
-    scale_x_discrete(expand=c(0, 1000000)) +
+    #scale_x_discrete(expand=c(0, 1000000)) +
     geom_dl(aes(label = Region, col = Region),
             method = list(dl.combine("last.points"),
                           cex = 0.8)) +
@@ -590,6 +619,29 @@ log_plot<-function(db,
 
 
 }
+
+plot_test_share<-function(db_at,
+                          filename_add = ""){
+
+  p<-db_at %>% dplyr::select(Date, Type, Cases) %>%
+    spread(Type, Cases) %>%
+    mutate(Infected_New = c(NA,diff(Infected))) %>%
+    mutate(Ratio_Ill_to_New_Infections = Infected_New / Currently_Ill) %>%
+    na.omit() %>%
+    ggplot(aes(x = Date, y = 100 * Ratio_Ill_to_New_Infections)) +
+    geom_line(col = COLORS[1]) +
+    ylab("Anteil neuer positiver Tests \nan aktuellen Erkrankungen \n(in %)")
+
+  ggsave(get_filename(TEST_SHARE_FILENAME,
+                      filename_add),
+         p,
+         width = 10,
+         height = 5)
+
+  return(p)
+
+}
+
 
 plot_doubling_time<-function(db,
                              region = "Austria",
@@ -825,17 +877,18 @@ plot_overview<-function(db,
                               align = "right")) %>%
       ungroup()
 
-    ylab_lng <- "Individuen \n(Individuen/Tag - 7-Tages Durchschnitt)"
+    ylab_lng <- "Tägliche Fälle (Indiviuden / Tag [7-Tages Durchschnitt])"
 
   }
 
   db <- db %>%
-    mutate(Type = ifelse(Type == "Infected", "Positiv getestet", Type)) %>%
-    mutate(Type = ifelse(Type == "Dead", "Verstorben", Type)) %>%
-    mutate(Type = ifelse(Type == "Recovered", "Genesen", Type)) %>%
-    mutate(Type = ifelse(Type == "In_Hospital", "Hospitalisiert", Type)) %>%
-    mutate(Type = ifelse(Type == "Intensive_Care", "Intensivstation", Type)) %>%
-    mutate(Type = ifelse(Type == "Currently_Ill", "Derzeit erkrankt", Type))
+    #filter(Type %in% c("Currently_Ill", "Intensive_Care", "In_Hospital", "Dead")) %>%
+    mutate(Type = ifelse(Type == "Infected", "Positiv getestet\n(kumuliert)", Type)) %>%
+    mutate(Type = ifelse(Type == "Dead", "Verstorben\n(kumuliert)", Type)) %>%
+    mutate(Type = ifelse(Type == "Recovered", "Genesen\n(kumuliert)", Type)) %>%
+    mutate(Type = ifelse(Type == "In_Hospital", "Hospitalisiert\n(Täglich)", Type)) %>%
+    mutate(Type = ifelse(Type == "Intensive_Care", "Intensivstation\n(Täglich)", Type)) %>%
+    mutate(Type = ifelse(Type == "Currently_Ill", "Erkrankt\n(Täglich)", Type))
 
   db$Type <- factor(db$Type)
   db$Type <- factor(db$Type,
@@ -867,6 +920,118 @@ plot_overview<-function(db,
   p
 
 }
+
+plot_overview_short<-function(db,
+                        region = "Austria",
+                        language = "at",
+                        filename_add = "",
+                        diff = FALSE,
+                        log_scale = TRUE,
+                        roll_mean_length = 1) {
+
+
+  caption_lng <- "Quelle: Wikipedia. Letzter Datenpunkt:"
+
+  ylab_lng <- "Individuen \n(logarithmische Skala)"
+
+  if(!log_scale){
+    ylab_lng <- "Individuen"
+  }
+
+  date_lng <- "Datum"
+
+  if(language == "br"){
+
+    ylab_lng <- "Indíviduos\n(Escala logarítimica)"
+
+    caption_lng <- "Fonte: https://raw.githubusercontent.com/CSSEGISandData/COVID-19/. Último ponto de dados:"
+    date_lng <- "Data"
+  }
+
+
+
+
+
+  types <- c(
+             #"Infected",
+             #"Dead",
+             "In_Hospital",
+             "Intensive_Care",
+             "Currently_Ill")
+
+  if(!diff){
+    types1 <-  c(
+          #"Infected",
+          #       "Dead",
+          #       "In_Hospital",
+          #       "Intensive_Care",
+          #       "Recovered"
+      )
+
+    types <- c(types,
+               types1
+    )
+  }
+
+  db<-db %>%
+    filter(Region == region) %>%
+    filter(Type %in% types)
+
+
+  if(diff){
+    db <- db %>%
+      group_by(Type) %>%
+      mutate(Cases = c(0, diff(Cases))) %>%
+      mutate(Cases = rollmean(Cases,
+                              roll_mean_length,
+                              na.pad=TRUE,
+                              align = "right")) %>%
+      ungroup()
+
+    ylab_lng <- "Tägliche Fälle (Indiviuden / Tag [7-Tages Durchschnitt])"
+
+  }
+
+  db <- db %>%
+    #filter(Type %in% c("Currently_Ill", "Intensive_Care", "In_Hospital", "Dead")) %>%
+    mutate(Type = ifelse(Type == "Infected", "Positiv getestet\n(kumuliert)", Type)) %>%
+    mutate(Type = ifelse(Type == "Dead", "Verstorben\n(kumuliert)", Type)) %>%
+    mutate(Type = ifelse(Type == "Recovered", "Genesen\n(kumuliert)", Type)) %>%
+    mutate(Type = ifelse(Type == "In_Hospital", "Hospitalisiert\n", Type)) %>%
+    mutate(Type = ifelse(Type == "Intensive_Care", "Intensivstation\n", Type)) %>%
+    mutate(Type = ifelse(Type == "Currently_Ill", "Erkrankt\n", Type))
+
+  db$Type <- factor(db$Type)
+  db$Type <- factor(db$Type,
+                    levels = levels(db$Type)[c(5, 1, 3, 2, 4, 6)])
+
+  #### plot overview data
+  p <- db %>%
+    ggplot(aes(x = Date, y = Cases)) +
+    geom_point(aes(col = Type)) +
+    geom_line(aes(col = Type))  +
+    scale_color_manual(values = COLORS[c(1, 2, 5, 6, 9, 10)]) +
+    ylab(ylab_lng) +
+    labs(caption = paste(caption_lng, get_last_date(db))) +
+    ggtitle(region) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+
+    xlab(date_lng)
+
+  if(log_scale){
+    p <- p + scale_y_log10()
+  }
+
+  ggsave(get_filename(OVERVIEW_FILENAME,
+                      filename_add),
+         p,
+         width = 10,
+         height = 5)
+
+  p
+
+}
+
 
 #' Fits a generic linear model to input data and projects future infections from the model
 #'
@@ -1220,10 +1385,11 @@ plot_prediction<-function(db,
 #' @return
 #'
 #' @examples
-#' plot_infected_tests_ratio(scrape_wikipedia_at()[[1]])
+#' (scrape_wikipedia_at()[[1]])
 
 plot_infected_tests_ratio<-function(db,
-                                    region = "Austria"){
+                                    region = "Austria",
+                                    file_add = ""){
 
   db<-db %>%
     filter(Region == region & Type %in% c("Nmb_Tested", "Infected")) %>%
@@ -1238,7 +1404,9 @@ plot_infected_tests_ratio<-function(db,
 
   p <- db %>%
     mutate(Tests_Ind = c(first_value_tests, diff(Nmb_Tested))) %>%
-    mutate(Infected_Ind = c(first_value_infected, diff(Infected))) %>%
+#        mutate(Tests_Ind = Nmb_Tested) %>%
+
+        mutate(Infected_Ind = c(first_value_infected, diff(Infected))) %>%
     dplyr::select(Date, Nmb_Tested, Tests_Ind, Infected_Ind) %>%
       mutate(Prop_Infected_Tests = 100 * Infected_Ind/Tests_Ind) %>%
     na.omit() %>%
@@ -1251,7 +1419,8 @@ plot_infected_tests_ratio<-function(db,
     theme(plot.title = element_text(hjust = 0.5))
 
 
-  ggsave(INFECTED_TEST_RATIO_FILENAME,
+  ggsave(get_filename(INFECTED_TEST_RATIO_FILENAME,
+                       file_add),
          p,
          width = 10,
          height = 5)
@@ -1274,7 +1443,8 @@ plot_infected_tests_ratio<-function(db,
 #' plot_number_tests(scrape_wikipedia_at()[[1]])
 
 plot_number_tests<-function(db,
-                            region = "Austria"){
+                            region = "Austria",
+                            file_add = ""){
 
   db<-db %>%
     filter(Region == region & Type %in% c("Nmb_Tested", "Infected")) %>%
@@ -1290,7 +1460,9 @@ plot_number_tests<-function(db,
 
   p <- db %>%
     mutate(Tests_Ind = c(first_value_tests, diff(Nmb_Tested))) %>%
-    ggplot(aes(x = Date, y = Tests_Ind)) +
+#    mutate(Tests_Ind = Nmb_Tested) %>%
+
+        ggplot(aes(x = Date, y = Tests_Ind)) +
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1]) +
     ylab("Anzahl Tests (Tests / Tag)") +
@@ -1299,7 +1471,8 @@ plot_number_tests<-function(db,
     theme(plot.title = element_text(hjust = 0.5))
 
 
-  ggsave(NMB_TESTS_FILENAME,
+  ggsave(get_filename(NMB_TESTS_FILENAME,
+                       file_add),
          p,
          width = 10,
          height = 5)
