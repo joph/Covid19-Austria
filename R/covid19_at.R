@@ -28,6 +28,7 @@ DOUBLING_FILENAME<-"covid19_doubling.png"
 FILE_NAME_LOG_PLOT <-"covid19_log.png"
 PREDICTION_QUALITY_FILENAME <- "covid19_prediction_quality.png"
 TEST_SHARE_FILENAME <- "covid19_test_share.png"
+SHARE_HOSPITAL_FILENAME <- "share_hospital.png"
 
 overwrite_filenames<-function(country){
   covid19at::OVERVIEW_FILENAME <- paste0("figures/",country,"_covid19_infektionen.png")
@@ -50,7 +51,7 @@ INHABITANTS_ITALY <- 60.48*10^6
 INHABITANTS_AUSTRIA <- 8.82*10^6
 
 download_international_cases<-function(){
-  confirmed<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+  confirmed<-"https://raw.githubusercontent.com/CSSEGISandt ta/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
   dead<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"
   recovered<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv"
 
@@ -153,6 +154,46 @@ plot_country_comparison<-function(db_,
 
 }
 
+
+get_data_at_corin.at <- function(){
+
+
+  download.file("https://corin.at/raw.php?format=csv", "data/blockchain.csv")
+  dat<-read_csv("data/blockchain.csv")
+
+  dat <- dat %>%
+    mutate(Region = "Austria") %>%
+    mutate(Population = INHABITANTS_AUSTRIA) %>%
+    mutate(Date = dmy(substr(dataTime, 1, 8)))
+    #mutate(Date = as.POSIXct(dataTime, format = "%d.%m.%Y %H:%M:%OS"))
+
+  dat %>%
+    dplyr::select(Region,
+                Date,
+                Dead = total_death,
+                Infected = total_confirmed,
+                Recovered = total_recovered,
+                In_Hospital = total_hosp,
+                Intensive_Care = total_intens,
+                Nmb_Tested = total_tests,
+                Population) %>%
+    mutate(Currently_Ill =
+            Infected - Dead - Recovered) %>%
+    gather(Type,
+         Cases,
+         -Region,
+         -Date,
+         -Population) %>%
+    group_by(Date, Region, Type, Population) %>%
+    summarize(Cases = max(Cases)) %>%
+    mutate(Cases_proportional = 100 * Cases / INHABITANTS_AUSTRIA) %>%
+    na.omit() %>%
+    ungroup() %>%
+    return()
+
+
+}
+
 #' Download, clean and save data on infections in Austria from wikipedia
 #'
 #' Downloads the data and saves a feather file with the data in data/data.feather
@@ -175,11 +216,15 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
 
   webpage <- xml2::read_html(wikipedia_url)
 
-  wikipedia_table <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[6]]
+  wikipedia_table_clean <- NULL
 
-  wikipedia_table_clean <- wikipedia_table[-1,]
+  for(i in c(5:11)){
 
-  names(wikipedia_table_clean)<-c("Datum",
+    wikipedia_table <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[i]]
+
+    wikipedia_table_clean_ <- wikipedia_table[c(-1,-2),]
+
+    names(wikipedia_table_clean_)<-c("Datum",
                                 "NOE",	"W",	"St",	"T",	"O?",	"S",	"B",	"V",	"K",
                                 "Infektionen kumuliert",
                                 "Neuinfektionen",
@@ -191,50 +236,55 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
                                 "Aktive Infektionen",
                                 "Zuwachs")
 
+    wikipedia_table_clean<-bind_rows(wikipedia_table_clean, wikipedia_table_clean_)
+  }
+
   wikipedia_table_clean<- wikipedia_table_clean %>%
     mutate(`Infektionen kumuliert` = str_replace(wikipedia_table_clean$`Infektionen kumuliert`, "\\.", ""))   %>%
     mutate(`Infektionen kumuliert` = as.numeric(`Infektionen kumuliert`))
 
+  nmb_tests<-NULL
 
-  nmb_tests <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[10]]
+  for(i in 22:28){
+    nmb_tests_ <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[i]]
 
-  names(nmb_tests)[1]<-"Datum"
-  names(nmb_tests)[3]<-"Tests"
+    nmb_tests_ <- nmb_tests_[-1, ]
+
+    names(nmb_tests_)[1]<-"Datum"
+    names(nmb_tests_)[3]<-"Tests"
+
+    nmb_tests<-bind_rows(nmb_tests, nmb_tests_)
+  }
 
   nmb_tests <- nmb_tests %>%
     clean_date() %>%
     mutate(Tests = str_replace(nmb_tests$Tests, "\\.", ""))   %>%
+    #mutate(Tests = str_replace(nmb_tests$Tests, "\\.", ""))   %>%
     mutate(Tests = str_replace(nmb_tests$Tests, "\\(a\\)", ""))    %>%
     mutate(Tests = str_replace(Tests, "\\(a\\)", "")) %>%
+    mutate(Tests = str_replace(Tests, "\\.", "")) %>%
     mutate(Tests = str_replace(Tests, "\\.", "")) %>%
     mutate(Tests = as.numeric(Tests)) %>%
     mutate(D = as.Date(Datum))
 
 #  wikipedia_table_clean$`Testungen kumuliert`<-tibble(t=c(wikipedia_table_1$`Tests aufsummiert`))[1:nrow(wikipedia_table_clean),]$t
 
-  wikipedia_table_2 <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[13]]
-
-  wikipedia_table_2 <- wikipedia_table_2[-1, c(1, 11)]
-  names(wikipedia_table_2)[1]<-"Datum"
-  names(wikipedia_table_2)[2]<-"Bundesweit"
-
-  wikipedia_table_2 <- wikipedia_table_2 %>%
-    mutate(Bundesweit = str_replace(wikipedia_table_2$Bundesweit, "\\.", ""))   %>%
-    mutate(Bundesweit = as.numeric(Bundesweit))
 
 
-  wikipedia_table_2 <- wikipedia_table_2 %>%
-    clean_date()
+  In_Hospital<-NULL
 
-  wikipedia_table_2 <- wikipedia_table_2 %>%
-    mutate(D = as.Date(Datum))
+  for(i in 29:35){
+    In_Hospital_ <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[i]]
+
+    In_Hospital_ <- In_Hospital_[c(-1,-2), c(1, 11)]
+
+    names(In_Hospital_)[1]<-"Datum"
+    names(In_Hospital_)[2]<-"Hospitalisiert"
 
 
-  In_Hospital <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[11]]
+    In_Hospital<-bind_rows(In_Hospital, In_Hospital_)
+  }
 
-  In_Hospital <- In_Hospital[-1, c(1, 11)]
-  names(In_Hospital)[1]<-"Datum"
-  names(In_Hospital)[2]<-"Hospitalisiert"
 
   In_Hospital <- In_Hospital %>%
     clean_date()
@@ -242,12 +292,20 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
   In_Hospital <- In_Hospital %>%
     mutate(D = as.Date(Datum))
 
+  Intensive_Care<-NULL
 
-  Intensive_Care <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[12]]
+  for(i in 36:42){
+    Intensive_Care_ <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[i]]
 
-  Intensive_Care <- Intensive_Care[-1, c(1, 11)]
-  names(Intensive_Care)[1]<-"Datum"
-  names(Intensive_Care)[2]<-"Intensive_Care"
+    Intensive_Care_ <- Intensive_Care_[c(-1,-2), c(1, 11)]
+
+    names(Intensive_Care_)[1]<-"Datum"
+    names(Intensive_Care_)[2]<-"Intensive_Care"
+
+
+    Intensive_Care<-bind_rows(Intensive_Care, Intensive_Care_)
+  }
+
 
   Intensive_Care <- Intensive_Care %>%
     clean_date()
@@ -255,8 +313,33 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
   Intensive_Care <- Intensive_Care %>%
     mutate(D = as.Date(Datum))
 
-  #wikipedia_table_clean$`Genesen kumuliert`<-tibble(t=c(wikipedia_table_2$Bundesweit))[1:nrow(wikipedia_table_clean),]$t
 
+  Recovered<-NULL
+
+  for(i in 37:42){
+    Recovered_ <- rvest::html_table(webpage, dec = ",", fill = TRUE)[[i]]
+
+    Recovered_ <- Recovered_[c(-1,-2), ]
+
+    names(Recovered_)[1]<-"Datum"
+    names(Recovered_)[11]<-"Recovered"
+
+
+    Recovered<-bind_rows(Recovered, Recovered_)
+  }
+
+  Recovered_1 <- Recovered
+
+  Recovered_1 <- Recovered_1 %>%
+    mutate(Recovered = str_replace(Recovered_1$Recovered, "\\.", ""))   %>%
+    mutate(Recovered = as.numeric(Recovered))
+
+
+  Recovered_1 <- Recovered_1 %>%
+    clean_date()
+
+  Recovered_1 <- Recovered_1 %>%
+    mutate(D = as.Date(Datum))
 
   wikipedia_table_clean <- wikipedia_table_clean %>%
     clean_date() %>%
@@ -266,7 +349,7 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
     mutate(D = as.Date(Datum))
 
   wikipedia_table_clean <- full_join(wikipedia_table_clean,
-                                     wikipedia_table_2,
+                                     Recovered_1,
                                      by = c("D" = "D")) %>%
     mutate(Datum = Datum.x)
 
@@ -296,12 +379,12 @@ scrape_wikipedia_at<-function(wikipedia_url = WIKIPEDIA_URL_AT){
   wikipedia_table_conv <- wikipedia_table_conv %>%
     mutate(Region = "Austria") %>%
     mutate(Population = INHABITANTS_AUSTRIA) %>%
-    mutate(Currently_Ill = `Infektionen kumuliert` - `Bundesweit` - `Todesf?lle kumuliert`) %>%
+    mutate(Currently_Ill = `Infektionen kumuliert` - Recovered - `Todesf?lle kumuliert`) %>%
     dplyr::select(Region,
                   Date = Datum.x,
                   Dead = `Todesf?lle kumuliert`,
                   Infected = `Infektionen kumuliert`,
-                  Recovered = `Bundesweit`,
+                  Recovered = Recovered,
                   In_Hospital = Hospitalisiert,
                   Intensive_Care = Intensive_Care,
                   Nmb_Tested = Tests,
@@ -433,7 +516,7 @@ plot_growth_data<-function(db,
          avg,
          " Tage in %)")
 
-  caption_lng <- "Quelle: Wikipedia. Letzter Datenpunkt:"
+  caption_lng <- "Quelle: corin.at Letzter Datenpunkt:"
 
   date_lng <- "Datum"
 
@@ -542,8 +625,8 @@ plot_growth_data<-function(db,
   p <- growth %>%
     na.omit() %>%
     ggplot(aes(x = Date, y = Rate_percent)) +
-    geom_hline(yintercept = 7, linetype = 2) +
-    geom_hline(yintercept = 10, linetype = 2) +
+    #geom_hline(yintercept = 7, linetype = 2) +
+    #geom_hline(yintercept = 10, linetype = 2) +
     geom_hline(yintercept = 0, linetype = 2) +
     geom_line(aes(col = Type)) +
     scale_color_manual(values = COLORS) +
@@ -565,6 +648,7 @@ plot_growth_data<-function(db,
   return(list(p, growth))
 
 }
+
 
 log_plot<-function(db,
                    variable = "Infected",
@@ -656,7 +740,7 @@ plot_doubling_time<-function(db,
                      avg,
                      " Tage in Tagen)")
 
-  caption_lng <- "Quelle: Wikipedia. Letzter Datenpunkt:"
+  caption_lng <- "Quelle: corin.at Letzter Datenpunkt:"
 
   date_lng <- "Datum"
 
@@ -822,7 +906,7 @@ plot_overview<-function(db,
                         roll_mean_length = 1) {
 
 
-  caption_lng <- "Quelle: Wikipedia. Letzter Datenpunkt:"
+  caption_lng <- "Quelle: corin.at Letzter Datenpunkt:"
 
   ylab_lng <- "Individuen \n(logarithmische Skala)"
 
@@ -930,7 +1014,7 @@ plot_overview_short<-function(db,
                         roll_mean_length = 1) {
 
 
-  caption_lng <- "Quelle: Wikipedia. Letzter Datenpunkt:"
+  caption_lng <- "Quelle: corin.at Letzter Datenpunkt:"
 
   ylab_lng <- "Individuen \n(logarithmische Skala)"
 
@@ -999,7 +1083,28 @@ plot_overview_short<-function(db,
     mutate(Type = ifelse(Type == "Recovered", "Genesen\n(kumuliert)", Type)) %>%
     mutate(Type = ifelse(Type == "In_Hospital", "Hospitalisiert\n", Type)) %>%
     mutate(Type = ifelse(Type == "Intensive_Care", "Intensivstation\n", Type)) %>%
-    mutate(Type = ifelse(Type == "Currently_Ill", "Erkrankt\n", Type))
+    mutate(Type = ifelse(Type == "Currently_Ill", "Derzeit positiv getestet\n", Type))
+
+  p1<-db %>% dplyr::select(Date, Type, Cases) %>%
+
+    spread(Type,Cases) %>%
+    mutate(`Anteil Hospitalisierte\n an positiv Getesteten`=`Hospitalisiert\n`/`Derzeit positiv getestet\n`,
+           `Anteil Intensivstation\n an positiv Getesteten`=`Intensivstation\n`/`Derzeit positiv getestet\n`) %>%
+    dplyr::select(Date,`Anteil Hospitalisierte\n an positiv Getesteten`,`Anteil Intensivstation\n an positiv Getesteten`) %>%
+    gather(Type,Anteil,-Date) %>%
+    mutate(Anteil=na.approx(Anteil,na.rm=FALSE)) %>%
+    ggplot(aes(x=Date,y=100*Anteil)) +
+    geom_line(aes(col=Type)) +
+    scale_color_manual(values = COLORS[c(1, 9, 5, 6, 9, 10)]) +
+    xlab("Datum") +
+    ylab("Anteil (%)")
+
+  ggsave(get_filename(SHARE_HOSPITAL_FILENAME,
+                      filename_add),
+         p1,
+         width = 10,
+         height = 5)
+
 
   db$Type <- factor(db$Type)
   db$Type <- factor(db$Type,
@@ -1085,7 +1190,7 @@ plot_prediction_combined<-function(db,
 
   ylab_lng <- paste0("Anzahl positiv getesteter Individuen")
 
-  caption_lng <- "Quelle: Wikipedia. Letzter Datenpunkt:"
+  caption_lng <- "Quelle: corin.at Letzter Datenpunkt:"
 
   date_lng <- "Datum"
 
@@ -1206,7 +1311,7 @@ plot_prediction_combined<-function(db,
       filter(Model_Name != "Exponentielles Modell")
   }
 
-  caption_lng <- paste("Quelle: Wikipedia. Letzer Datenpunkt:",
+  caption_lng <- paste("Quelle: corin.at Letzer Datenpunkt:",
         get_last_date(db),
         "\nVorhersage positiv getesteter Individuen am ", final_date, "\nPolynomielles Modell: ",
         round(estimates_ahead$res[1]),
@@ -1358,7 +1463,7 @@ plot_prediction<-function(db,
     geom_line(aes(col = Model_Name, linetype = Variable)) +
     scale_color_manual(values = COLORS) +
     ylab("Infektionen (Faelle)") +
-    labs(caption = paste("Quelle: Wikipedia. Letzer Datenpunkt:",
+    labs(caption = paste("Quelle: corin.at Letzer Datenpunkt:",
                          get_last_date(db),
                        "\nVorhersage positiv getestete Individuen am ", final_date, add_string,
                        round(prediction_week_ahead))) +
@@ -1414,7 +1519,7 @@ plot_infected_tests_ratio<-function(db,
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1]) +
     ylab("Verhaeltnis Covid-19 Infektionen zu Tests (%)") +
-    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db))) +
+    labs(caption = paste("Quelle: corin.at Letzter Datenpunkt:", get_last_date(db))) +
     ggtitle(region) +
     theme(plot.title = element_text(hjust = 0.5))
 
@@ -1466,7 +1571,7 @@ plot_number_tests<-function(db,
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1]) +
     ylab("Anzahl Tests (Tests / Tag)") +
-    labs(caption = paste("Quelle: Wikipedia. Letzter Datenpunkt:", get_last_date(db))) +
+    labs(caption = paste("Quelle: corin.at Letzter Datenpunkt:", get_last_date(db))) +
     ggtitle(region) +
     theme(plot.title = element_text(hjust = 0.5))
 

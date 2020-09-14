@@ -14,22 +14,22 @@ update_geom_defaults("line", list(size = 1.2))
 
 Sys.setlocale("LC_ALL", "German")
 
-db_at <- scrape_wikipedia_at()
+db_at <- get_data_at_corin.at()
 
 db_international <- download_international_cases()
 
-db_at <- db_at %>%
-  filter(!(Date > as.POSIXct("2020-05-01 01:00:00")))
+#db_at <- db_at %>%
+#  filter(!(Date > as.POSIXct("2020-05-01 01:00:00")))
 
-db_at <- manual_data_entry(db_at,
-                           date = as.POSIXct("2020-05-01 15:00:00"),
-                           #8958
-                           cases_infected_cum = 15470,
-                           cases_dead_cum = 589,
-                           cases_recovered_cum = 13110,
-                           tests = 264079,
-                           hospital = 472,
-                           intensive = 124)
+#db_at <- manual_data_entry(db_at,
+#                           date = as.POSIXct("2020-05-01 15:00:00"),
+#                           #8958
+#                           cases_infected_cum = 15470,
+#                           cases_dead_cum = 589,
+#                           cases_recovered_cum = 13110,
+#                           tests = 264079,
+#                           hospital = 472,
+#                           intensive = 124)
 
 
 
@@ -59,7 +59,7 @@ db_at %>%
 
 
 countries<-c("Austria",
-  "China",
+  #"China",
   "United States",
   "United Kingdom",
   #"Italy",
@@ -75,7 +75,9 @@ countries<-c("Austria",
 #"Japan")
 
 
+
 plot_test_share(db_at)
+
 
 log_plot(db_international,
          "Infected",
@@ -90,13 +92,16 @@ log_plot(db_international,
 
 
 
-results<-plot_growth_data(db_at %>% filter(Date > Sys.Date() - 21),
+
+results<-plot_growth_data(db_at %>% filter(Date > Sys.Date() - 100),
                  avg = 7)
 
 
 results[[1]]
 
-results[[2]] %>%
+results[[2]] %>% tail()
+
+%>%
   filter(Date > Sys.Date()) %>%
   tail(10)
 
@@ -111,6 +116,34 @@ plot_overview_short(db_at,
 plot_infected_tests_ratio(db_at)
 
 plot_number_tests(db_at)
+
+library(lubridate)
+
+db_at %>% filter(Type == "Nmb_Tested") %>% mutate(c=c(0,diff(Cases))) %>%
+  group_by(day=wday(Date)) %>%
+  summarize(tests_per_day=mean(c)) %>%
+  ggplot(aes(x=day,y=tests_per_day)) +
+  geom_line() +
+  scale_x_continuous(breaks=seq(1,7),
+                     labels=c("So", "Mo", "Di", "Mi", "Do", "Fr", "Sa")) +
+  xlab("Tag") +
+  ylab("Für Vortag gemeldete Covid-19 Tests \n (Durcschnitt pro Wochentag in Österreich)")
+
+
+ggsave("figures/tests-per-day.png")
+
+db_at %>% filter(Type == "Infected") %>% mutate(c=c(0,diff(Cases))) %>%
+  group_by(day=wday(Date)) %>%
+  summarize(tests_per_day=mean(c)) %>%
+  ggplot(aes(x=day,y=tests_per_day)) +
+  geom_line() +
+  scale_x_continuous(breaks=seq(1,7),
+                     labels=c("So", "Mo", "Di", "Mi", "Do", "Fr", "Sa")) +
+  xlab("Tag") +
+  ylab("Für Vortag gemeldete positive Covid-19 Tests \n (Durcschnitt pro Wochentag in Österreich)")
+
+
+ggsave("figures/infected-per-day.png")
 
 authentification <- feather("authentification")
 
@@ -134,7 +167,7 @@ tweet2<-updateStatus(text = " #COVID  #CoronaVirusAt Datenupdate Österreich. L�
                      mediaPath = get_filename(FILE_NAME_LOG_PLOT, ""),
                      inReplyTo=tweet1$id)
 
-tweet3<-updateStatus(text = " #COVID  #CoronaVirusAt Datenupdate Österreich. Ländervergleich. Covid19-Tote.3/7",
+tweet3<-updateStatus(text = " #COVID  #CoronaVirusAt Datenupdate Österreich. Ländervergleich. Covid19-Tote. 3/7",
                      mediaPath = get_filename(FILE_NAME_LOG_PLOT, "DEAD"),
                      inReplyTo=tweet2$id)
 
@@ -160,7 +193,7 @@ tweet7<-updateStatus(text = "#COVID  #CoronaVirusAt #RStats Code for analysis of
 
 
 
-stweet1<-updateStatus(text = " #COVID #CoronaVirusAt Corona. Fälle/Tag, im Durchschnitt der letzten 7 Tage (logarithmische Skala). 1/7",
+tweet1<-updateStatus(text = " #COVID #CoronaVirusAt Corona. Fälle/Tag, im Durchschnitt der letzten 7 Tage (logarithmische Skala). 1/7",
                      mediaPath = get_filename(OVERVIEW_FILENAME, ""))
 
 
