@@ -29,6 +29,7 @@ FILE_NAME_LOG_PLOT <-"covid19_log.png"
 PREDICTION_QUALITY_FILENAME <- "covid19_prediction_quality.png"
 TEST_SHARE_FILENAME <- "covid19_test_share.png"
 SHARE_HOSPITAL_FILENAME <- "share_hospital.png"
+RELATIVE_FILENAME <- "covid19_relative_values.png"
 
 overwrite_filenames<-function(country){
   covid19at::OVERVIEW_FILENAME <- paste0("figures/",country,"_covid19_infektionen.png")
@@ -51,9 +52,15 @@ INHABITANTS_ITALY <- 60.48*10^6
 INHABITANTS_AUSTRIA <- 8.82*10^6
 
 download_international_cases<-function(){
-  confirmed<-"https://raw.githubusercontent.com/CSSEGISandt ta/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+  #confirmed<-"https://raw.githubusercontent.com/CSSEGISandt ta/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+  #dead<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"
+  #recovered<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv"
+
+  confirmed<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+
   dead<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv"
   recovered<-"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv"
+
 
   download.file(confirmed,
                 "data/global_confirmed.csv")
@@ -603,7 +610,7 @@ plot_growth_data<-function(db,
 
   if(nrow(db6) > 0){
 
-    lng <- "Erkrankte\n(Täglich)"
+    lng <- "Positiv Getestete\n(Täglich)"
 
     if(language == "br"){
       lng <- "Doentes no momento"
@@ -1496,12 +1503,13 @@ plot_infected_tests_ratio<-function(db,
                                     region = "Austria",
                                     file_add = ""){
 
+  db_o<-db
+
   db<-db %>%
     filter(Region == region & Type %in% c("Nmb_Tested", "Infected")) %>%
     arrange(Date) %>%
     dplyr::select(Date, Type, Cases) %>%
     spread(Type, Cases)
-
 
   first_value_tests <- db$Nmb_Tested[1]
   first_value_infected <- db$Infected[1]
@@ -1510,16 +1518,20 @@ plot_infected_tests_ratio<-function(db,
   p <- db %>%
     mutate(Tests_Ind = c(first_value_tests, diff(Nmb_Tested))) %>%
 #        mutate(Tests_Ind = Nmb_Tested) %>%
-
         mutate(Infected_Ind = c(first_value_infected, diff(Infected))) %>%
-    dplyr::select(Date, Nmb_Tested, Tests_Ind, Infected_Ind) %>%
-      mutate(Prop_Infected_Tests = 100 * Infected_Ind/Tests_Ind) %>%
+    dplyr::select(Date, Tests_Ind, Infected_Ind) %>%
+    group_by(Week=week(Date)) %>%
+    summarize(Tests_Ind=sum(Tests_Ind), Infected_Ind=sum(Infected_Ind)) %>%
+    ungroup() %>%
+    dplyr::select(Week, Tests_Ind, Infected_Ind) %>%
+    mutate(Prop_Infected_Tests = 100 * Infected_Ind/Tests_Ind) %>%
     na.omit() %>%
-    ggplot(aes(x = Date, y = Prop_Infected_Tests)) +
+    ggplot(aes(x = Week, y = Prop_Infected_Tests)) +
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1]) +
-    ylab("Verhaeltnis Covid-19 Infektionen zu Tests (%)") +
-    labs(caption = paste("Quelle: corin.at Letzter Datenpunkt:", get_last_date(db))) +
+    xlab("Woche 2020") +
+    ylab("Verhaeltnis Covid-19 Infektionen zu Tests \n(wöchentlich in %)") +
+    labs(caption = paste("Quelle: corin.at Letzter Datenpunkt:", get_last_date(db_o))) +
     ggtitle(region) +
     theme(plot.title = element_text(hjust = 0.5))
 
@@ -1578,6 +1590,47 @@ plot_number_tests<-function(db,
 
   ggsave(get_filename(NMB_TESTS_FILENAME,
                        file_add),
+         p,
+         width = 10,
+         height = 5)
+
+  p
+}
+
+plot_number_tests_aggregate<-function(db,
+                            region = "Austria",
+                            file_add = ""){
+
+  db<-db %>%
+    filter(Region == region & Type %in% c("Nmb_Tested", "Infected")) %>%
+    arrange(Date) %>%
+    dplyr::select(Date,
+                  Type,
+                  Cases) %>%
+    spread(Type,
+           Cases)
+
+
+  first_value_tests <- db$Nmb_Tested[1]
+
+  p <- db %>%
+    mutate(Tests_Ind = c(first_value_tests, diff(Nmb_Tested))) %>%
+    #    mutate(Tests_Ind = Nmb_Tested) %>%
+    group_by(Month = month(Date)) %>%
+    summarize(Tests_Ind = mean(Tests_Ind)) %>%
+
+    ggplot(aes(x = Month, y = Tests_Ind)) +
+    geom_point(col = COLORS[1]) +
+    geom_line(col = COLORS[1]) +
+    xlab("Monat") +
+    ylab("Anzahl Tests (Tests / Tag)") +
+    labs(caption = paste("Quelle: corin.at Letzter Datenpunkt:", get_last_date(db))) +
+    ggtitle(region) +
+    theme(plot.title = element_text(hjust = 0.5))
+
+
+  ggsave(get_filename(NMB_TESTS_FILENAME,
+                      file_add),
          p,
          width = 10,
          height = 5)
@@ -1689,6 +1742,55 @@ prediction_quality<-function(db,
 
 
 
+
+
+}
+
+plot_relative_values<-function(db,
+                               filename_add=""){
+
+  db_diff_dead <- db %>%
+    filter(Type == "Dead") %>%
+    mutate(Cases=Cases - lag(Cases))
+
+  db_diff_tested <- db %>%
+    filter(Type == "Nmb_Tested") %>%
+    mutate(Cases=Cases - lag(Cases))
+
+
+  db_diff <- db %>%
+    filter(!(Type %in% c("Dead", "Nmb_Tested"))) %>%
+    bind_rows(db_diff_dead) %>%
+    bind_rows(db_diff_tested)
+
+
+  p <- db_diff %>%
+    dplyr::select(Date, Type, Cases) %>%
+    group_by(Week=week(Date), Type) %>%
+    summarize(Cases=sum(Cases)) %>%
+    spread(Type,Cases) %>%
+    dplyr::select(-Nmb_Tested, -Recovered, -Infected) %>%
+    gather(Variable, Value, -Week, -Currently_Ill) %>%
+    mutate(Relative=Value / Currently_Ill)   %>%
+    mutate(Variable=ifelse(Variable=="Dead", "Verstorben", Variable)) %>%
+    mutate(Variable=ifelse(Variable=="In_Hospital", "Hospitalisiert", Variable)) %>%
+    mutate(Variable=ifelse(Variable=="Intensive_Care", "Intensivstation", Variable)) %>%
+    ungroup() %>%
+    filter(Week < max(Week)) %>%
+    ggplot(aes(x=Week, y=100*Relative)) +
+    geom_line(aes(col=Variable)) +
+    scale_color_manual(values = COLORS[c(1, 2, 5, 10)]) +
+    labs(caption = paste("Quelle: corin.at Letzter Datenpunkt:", get_last_date(db))) +
+    xlab("Woche 2020") +
+    ylab("Verhältnis Variable zu \nderzeitig positiv Getesteten (%)")
+
+  ggsave(get_filename(RELATIVE_FILENAME,
+                      filename_add),
+         p,
+         width = 10,
+         height = 5)
+
+  p
 
 
 }

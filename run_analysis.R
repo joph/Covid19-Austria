@@ -58,10 +58,11 @@ db_at %>%
 
 
 
+
 countries<-c("Austria",
   #"China",
   "United States",
-  "United Kingdom",
+  #"United Kingdom",
   #"Italy",
   "Brazil",
   #"Korea, Rep.",
@@ -70,8 +71,10 @@ countries<-c("Austria",
   "Spain",
   "Sweden",
 #  "United Kingdom",
-  "Belgium",
-  "Italy")
+  "Belgium")
+#,
+#"India")
+#  "Italy")
 #"Japan")
 
 
@@ -93,18 +96,25 @@ log_plot(db_international,
 
 
 
-results<-plot_growth_data(db_at %>% filter(Date > Sys.Date() - 100),
+results<-plot_growth_data(db_at %>% filter(Date > Sys.Date() - 14),
                  avg = 7)
-
 
 results[[1]]
 
 results[[2]] %>% tail()
 
-%>%
-  filter(Date > Sys.Date()) %>%
-  tail(10)
 
+
+results<-plot_growth_data(db_at %>% filter(Date > Sys.Date() - 240) %>% filter(Type %in% c("Currently_Ill")),
+                          avg = 7)
+
+
+
+results[[1]]
+
+ggsave("figures/growth.png")
+
+results[[2]] %>% tail()
 
 plot_overview_short(db_at,
               region = "Austria",
@@ -113,9 +123,23 @@ plot_overview_short(db_at,
               roll_mean_length = 7)
 
 
+plot_overview_short(db_at,
+                    region = "Austria",
+                    diff = FALSE,
+                    log_scale = FALSE,
+                    roll_mean_length = 7)
+
+
 plot_infected_tests_ratio(db_at)
 
 plot_number_tests(db_at)
+
+plot_number_tests_aggregate(db_at)
+
+plot_relative_values(db_at)
+
+ggsave("figures/tests_per_day.png")
+
 
 library(lubridate)
 
