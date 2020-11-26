@@ -21,43 +21,14 @@ db_international <- download_international_cases()
 #db_at <- db_at %>%
 #  filter(!(Date > as.POSIXct("2020-05-01 01:00:00")))
 
-#db_at <- manual_data_entry(db_at,
-#                           date = as.POSIXct("2020-05-01 15:00:00"),
-#                           #8958
-#                           cases_infected_cum = 15470,
-#                           cases_dead_cum = 589,
-#                           cases_recovered_cum = 13110,
-#                           tests = 264079,
-#                           hospital = 472,
-#                           intensive = 124)
-
-
-
-####try logistic curve
-infected <- get_infected(db_at,
-                         "Austria")
-mL <- drm(Cases ~ Date, data = infected, fct = L.3(), type = "continuous")
-summary(mL)
-plot(mL)
-
-
-###bis 29.3., 10:00
-
-#db_at %>% write_feather("data/database.feather")
-
-
-###write files to disk -> scientific computing
-db_at %>%
-  spread(Type, Cases) %>%
-  dplyr::select(Date, Infected) %>%
-  filter(Date > as.POSIXct("2020-03-04")) %>%
-  na.omit() %>%
-  write_csv("g:/meine ablage/lva/scientific computing/lecture-scientific-computing/lecture03-python-introduction/austria_covid_19_data.csv")
-
-
-
-
-
+db_at <- manual_data_entry(db_at,
+                           date = as.POSIXct("2020-11-26 15:00:00"),
+                           cases_infected_cum = 265094,
+                           cases_dead_cum = 2773,
+                           cases_recovered_cum = 196342,
+                           tests = 	2993814,
+                           hospital = 	4461,
+                           intensive = 	795)
 
 countries<-c("Austria",
   #"China",
@@ -70,6 +41,9 @@ countries<-c("Austria",
 #  "Japan",
   "Spain",
   "Sweden",
+  "Italy",
+
+  "Germany",
 #  "United Kingdom",
   "Belgium")
 #,
@@ -79,7 +53,8 @@ countries<-c("Austria",
 
 
 
-plot_test_share(db_at)
+#plot_test_share(db_at)
+
 
 
 log_plot(db_international,
@@ -99,27 +74,31 @@ log_plot(db_international,
 results<-plot_growth_data(db_at %>% filter(Date > Sys.Date() - 14),
                  avg = 7)
 
+
+
+results[[1]]
+
+results[[2]]
+
+results<-plot_growth_data(db_at %>% filter(Type %in% c("Currently_Ill")),
+                          avg = 7)
 results[[1]]
 
 results[[2]] %>% tail()
 
-
-
-results<-plot_growth_data(db_at %>% filter(Date > Sys.Date() - 240) %>% filter(Type %in% c("Currently_Ill")),
-                          avg = 7)
-
-
-
-results[[1]]
+how_long_until_daily_infections_below(results[[2]],
+                                      db_at,
+                                      500)
 
 ggsave("figures/growth.png")
 
-results[[2]] %>% tail()
+
+
 
 plot_overview_short(db_at,
               region = "Austria",
               diff = FALSE,
-              log_scale = FALSE,
+              log_scale = TRUE,
               roll_mean_length = 7)
 
 
@@ -136,9 +115,10 @@ plot_number_tests(db_at)
 
 plot_number_tests_aggregate(db_at)
 
-plot_relative_values(db_at)
+plot_relative_values(db_at %>% filter(Date > Sys.Date() - 200))
 
 ggsave("figures/tests_per_day.png")
+
 
 
 library(lubridate)
@@ -209,8 +189,14 @@ tweet6<-updateStatus(text = "#COVID #CoronaVirusAt Datenupdate Österreich. Verh
                      mediaPath = get_filename(INFECTED_TEST_RATIO_FILENAME, ""),
                      inReplyTo=tweet5$id)
 
-tweet7<-updateStatus(text = "#COVID  #CoronaVirusAt #RStats Code for analysis of Austrian infection data here. https://github.com/joph/Covid19-Austria 7/7",
-                      inReplyTo=tweet6$id)
+
+tweet7<-updateStatus(text = "#COVID #CoronaVirusAt Verhältnis Hospitalisierte, intensive Hospitalisierte & Verstorbene zu derzeit positiv Getesteten 6/7",
+                     mediaPath = get_filename(RELATIVE_FILENAME, ""),
+                     inReplyTo=tweet6$id)
+
+
+tweet8<-updateStatus(text = "#COVID  #CoronaVirusAt #RStats Code for analysis of Austrian infection data here. https://github.com/joph/Covid19-Austria 7/7",
+                      inReplyTo=tweet7$id)
 
 
 

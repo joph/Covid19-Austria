@@ -837,7 +837,7 @@ manual_data_entry<-function(db,
 
   new_entry <- tibble(
     Region = rep(region, 7),
-    Date = rep(date, 7),
+    Date = rep(as.Date(date), 7),
     Population = rep(population$value, 7),
     Type = c("Infected",
              "Recovered",
@@ -1618,7 +1618,6 @@ plot_number_tests_aggregate<-function(db,
     #    mutate(Tests_Ind = Nmb_Tested) %>%
     group_by(Month = month(Date)) %>%
     summarize(Tests_Ind = mean(Tests_Ind)) %>%
-
     ggplot(aes(x = Month, y = Tests_Ind)) +
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1]) +
@@ -1771,7 +1770,7 @@ plot_relative_values<-function(db,
     spread(Type,Cases) %>%
     dplyr::select(-Nmb_Tested, -Recovered, -Infected) %>%
     gather(Variable, Value, -Week, -Currently_Ill) %>%
-    mutate(Relative=Value / Currently_Ill)   %>%
+    mutate(Relative=(Value / Currently_Ill))   %>%
     mutate(Variable=ifelse(Variable=="Dead", "Verstorben", Variable)) %>%
     mutate(Variable=ifelse(Variable=="In_Hospital", "Hospitalisiert", Variable)) %>%
     mutate(Variable=ifelse(Variable=="Intensive_Care", "Intensivstation", Variable)) %>%
@@ -1782,7 +1781,8 @@ plot_relative_values<-function(db,
     scale_color_manual(values = COLORS[c(1, 2, 5, 10)]) +
     labs(caption = paste("Quelle: corin.at Letzter Datenpunkt:", get_last_date(db))) +
     xlab("Woche 2020") +
-    ylab("Verhältnis Variable zu \nderzeitig positiv Getesteten (%)")
+    ylab("Verhältnis Variable zu \nderzeitig positiv Getesteten (% - Logscale)") +
+    scale_y_log10()
 
   ggsave(get_filename(RELATIVE_FILENAME,
                       filename_add),
@@ -1793,6 +1793,44 @@ plot_relative_values<-function(db,
   p
 
 
+}
+
+how_long_until_daily_infections_below<-function(results,
+                                   db_at,
+                                   threshold){
+  ###how low do we go in two weeks?
+  infection_growth<-results %>%
+    dplyr::select(Rate_percent) %>%
+    na.omit() %>%
+    unlist() %>%
+    as.vector()
+
+  infection_growth<-infection_growth/100
+
+  diff_daily_growth <- (infection_growth[2:(length(infection_growth))] -
+                          infection_growth[1:(length(infection_growth)-1)])
+
+  plot(diff_daily_growth,type="l")
+  lines(c(0,length(diff_daily_growth)),c(0,0), type="l", lty=2)
+
+  avg_day_growth_per_week<-(-1 *mean(diff_daily_growth %>% tail(7)))
+
+  growth_with_avg_decrease<-cumprod(1-seq(infection_growth %>% tail(1)*-1,by = avg_day_growth_per_week,length.out=28))
+
+  infected<-db_at %>% filter(Type=="Infected") %>%
+    dplyr::select(Cases) %>%
+    tail(7) %>%
+    unlist()
+
+  infected_diff <- infected[2:length(infected)] - infected[1:(length(infected)-1)]
+
+  infected_diff_mean <-  mean(infected_diff)
+
+  days_future <- min(which((infected_diff_mean * growth_with_avg_decrease) < threshold))
+
+  return(tibble(Date=Sys.Date() + days_future,
+                avg_day_growth_per_week=avg_day_growth_per_week,
+                infected_diff_mean=infected_diff_mean))
 }
 
 
