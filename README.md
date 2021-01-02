@@ -9,7 +9,7 @@ Works with package devtools (install before usage!).
 <pre><code>
 devtools::install_github("joph/covid19at")
 </code></pre>
-
+ 
 ## Example script
 See run_analysis.R for Austria  
 
