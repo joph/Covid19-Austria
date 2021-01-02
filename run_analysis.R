@@ -7,7 +7,6 @@ library(directlabels)
 library(drc)
 
 
-
 theme_set(theme_classic(base_size = 16))
 
 update_geom_defaults("line", list(size = 1.2))
@@ -18,17 +17,41 @@ db_at <- get_data_at_corin.at()
 
 db_international <- download_international_cases()
 
+db_at %>% tail()
+
 #db_at <- db_at %>%
 #  filter(!(Date > as.POSIXct("2020-05-01 01:00:00")))
 
+db_at <- db_at %>% filter(Date<Sys.Date())
+
+#db_at <- manual_data_entry(db_at,
+ #                          date = as.POSIXct("2020-12-23 15:00:00"),
+#                           cases_infected_cum = 		280743,
+#                           cases_dead_cum = 3184,
+#                           cases_recovered_cum = 221692,
+#                           tests = 	3098318,
+#                           hospital = 	4340,
+#                           intensive = 	701)
+
 db_at <- manual_data_entry(db_at,
-                           date = as.POSIXct("2020-11-26 15:00:00"),
-                           cases_infected_cum = 265094,
-                           cases_dead_cum = 2773,
-                           cases_recovered_cum = 196342,
-                           tests = 	2993814,
-                           hospital = 	4461,
-                           intensive = 	795)
+                           date = as.POSIXct("2021-01-01 15:00:00"),
+                           cases_infected_cum = 				361623,
+                           cases_dead_cum = 6261,
+                           cases_recovered_cum = 334901,
+
+                           hospital = 	2243,
+                           intensive = 	385,
+                           tests = 		3857382)
+
+db_at <- manual_data_entry(db_at,
+                           date = as.POSIXct("2021-01-02 15:00:00"),
+                           cases_infected_cum = 				362043,
+                           cases_dead_cum = 6261,
+                           cases_recovered_cum = 334901,
+
+                           hospital = 	2243,
+                           intensive = 	385,
+                           tests = 		3857382)
 
 countries<-c("Austria",
   #"China",
@@ -39,11 +62,12 @@ countries<-c("Austria",
   #"Korea, Rep.",
   #"South Africa",
 #  "Japan",
-  "Spain",
+  #"Spain",
   "Sweden",
   "Italy",
-
+"Switzerland",
   "Germany",
+"Netherlands",
 #  "United Kingdom",
   "Belgium")
 #,
@@ -68,9 +92,6 @@ log_plot(db_international,
          lab = "Verstorbene Individuen \n(% der Bevölkerung)",
          filename_add = "DEAD")
 
-
-
-
 results<-plot_growth_data(db_at %>% filter(Date > Sys.Date() - 14),
                  avg = 7)
 
@@ -80,19 +101,29 @@ results[[1]]
 
 results[[2]]
 
+results<-plot_growth_data(db_at %>% filter(Type %in% c("Currently_Ill")) %>% filter(Date>Sys.Date()-90),
+                          avg = 7)
+results[[1]]
+
+
+ggsave("figures/growth-new-cases.png")
+
+db_at %>%
+  filter(Type == "New_Cases") %>%
+  ggplot(aes(x=(Date), y=Cases))+
+  geom_line()
+
 results<-plot_growth_data(db_at %>% filter(Type %in% c("Currently_Ill")),
                           avg = 7)
 results[[1]]
 
-results[[2]] %>% tail()
-
-how_long_until_daily_infections_below(results[[2]],
-                                      db_at,
-                                      500)
 
 ggsave("figures/growth.png")
+how_long_until_daily_infections_below(results[[2]],
+                                                db_at,
+                                                1050)
 
-
+results[[2]] %>% tail()
 
 
 plot_overview_short(db_at,
@@ -102,12 +133,20 @@ plot_overview_short(db_at,
               roll_mean_length = 7)
 
 
+plot_overview(db_at,
+                    region = "Austria",
+                    diff = FALSE,
+                    log_scale = TRUE,
+                    roll_mean_length = 7)
+
+
 plot_overview_short(db_at,
                     region = "Austria",
                     diff = FALSE,
                     log_scale = FALSE,
                     roll_mean_length = 7)
 
+ggsave("figures/overview-facet-wrap.png")
 
 plot_infected_tests_ratio(db_at)
 
@@ -116,6 +155,9 @@ plot_number_tests(db_at)
 plot_number_tests_aggregate(db_at)
 
 plot_relative_values(db_at %>% filter(Date > Sys.Date() - 200))
+
+ggsave("figures/relative-facet-wrap.png")
+
 
 ggsave("figures/tests_per_day.png")
 
@@ -161,41 +203,41 @@ setup_twitter_oauth(consumer_key = authentification$consumer_key[1],
 #                     mediaPath = get_filename(PREDICTIONS_FILENAME, "")
 #)
 
-tweet1<-updateStatus(text = " #COVID #CoronaVirusAt #Corona. Erkrankte, Hospitalisierte, Intensiv Hospitalisierte. 1/7",
+tweet1<-updateStatus(text = " #COVID #CoronaVirusAt #Corona. Erkrankte, Hospitalisierte, Intensiv Hospitalisierte. Verstorbene. 1/8",
                      mediaPath = get_filename(OVERVIEW_FILENAME, ""))
 
 #tweet1<-updateStatus(text = " #COVID #CoronaVirusAt Corona. Anteil neuer positiver Tests an aktuellen Erkrankungen. 1/7",
 #                     mediaPath = get_filename(TEST_SHARE_FILENAME, ""))
 
-tweet2<-updateStatus(text = " #COVID  #CoronaVirusAt Datenupdate Österreich. Ländervergleich positive Tests. 2/7",
+tweet2<-updateStatus(text = " #COVID  #CoronaVirusAt Datenupdate Österreich. Ländervergleich positive Tests. 2/8",
                      mediaPath = get_filename(FILE_NAME_LOG_PLOT, ""),
                      inReplyTo=tweet1$id)
 
-tweet3<-updateStatus(text = " #COVID  #CoronaVirusAt Datenupdate Österreich. Ländervergleich. Covid19-Tote. 3/7",
+tweet3<-updateStatus(text = " #COVID  #CoronaVirusAt Datenupdate Österreich. Ländervergleich. Covid19-Tote. 3/8",
                      mediaPath = get_filename(FILE_NAME_LOG_PLOT, "DEAD"),
                      inReplyTo=tweet2$id)
 
-tweet4<-updateStatus(text = " #COVID  #CoronaVirusAt Datenupdate Österreich. Wachstumsraten. 4/7",
+tweet4<-updateStatus(text = " #COVID  #CoronaVirusAt Datenupdate Österreich. Wachstumsraten. 4/8",
                      mediaPath = get_filename(GROWTH_RATE_FILENAME, "")
                      ,
                      inReplyTo=tweet3$id
 )
 
-tweet5<-updateStatus(text = "#COVID  #CoronaVirusAt Datenupdate Österreich. Gesamtanzahl Tests. 5/7",
+tweet5<-updateStatus(text = "#COVID  #CoronaVirusAt Datenupdate Österreich. Gesamtanzahl Tests. 5/8",
                      mediaPath = get_filename(NMB_TESTS_FILENAME, ""),
                      inReplyTo=tweet4$id)
 
-tweet6<-updateStatus(text = "#COVID #CoronaVirusAt Datenupdate Österreich. Verhältnis Infektionen zu Tests. 6/7",
+tweet6<-updateStatus(text = "#COVID #CoronaVirusAt Datenupdate Österreich. Verhältnis Infektionen zu Tests. 6/8",
                      mediaPath = get_filename(INFECTED_TEST_RATIO_FILENAME, ""),
                      inReplyTo=tweet5$id)
 
 
-tweet7<-updateStatus(text = "#COVID #CoronaVirusAt Verhältnis Hospitalisierte, intensive Hospitalisierte & Verstorbene zu derzeit positiv Getesteten 6/7",
+tweet7<-updateStatus(text = "#COVID #CoronaVirusAt Verhältnis Hospitalisierte, intensive Hospitalisierte & Verstorbene zu derzeit positiv Getesteten 7/8",
                      mediaPath = get_filename(RELATIVE_FILENAME, ""),
                      inReplyTo=tweet6$id)
 
 
-tweet8<-updateStatus(text = "#COVID  #CoronaVirusAt #RStats Code for analysis of Austrian infection data here. https://github.com/joph/Covid19-Austria 7/7",
+tweet8<-updateStatus(text = "#COVID  #CoronaVirusAt #RStats Code for analysis of Austrian infection data here. https://github.com/joph/Covid19-Austria 8/8",
                       inReplyTo=tweet7$id)
 
 

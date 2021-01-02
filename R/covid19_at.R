@@ -171,7 +171,11 @@ get_data_at_corin.at <- function(){
   dat <- dat %>%
     mutate(Region = "Austria") %>%
     mutate(Population = INHABITANTS_AUSTRIA) %>%
-    mutate(Date = dmy(substr(dataTime, 1, 8)))
+    mutate(Date = dmy(substr(dataTime, 1, 10))) %>%
+    map_df(rev) %>%
+    distinct(Date, .keep_all = TRUE) %>%
+    map_df(rev)
+
     #mutate(Date = as.POSIXct(dataTime, format = "%d.%m.%Y %H:%M:%OS"))
 
   dat %>%
@@ -186,6 +190,7 @@ get_data_at_corin.at <- function(){
                 Population) %>%
     mutate(Currently_Ill =
             Infected - Dead - Recovered) %>%
+    mutate(New_Cases = c(0,diff(Infected))) %>%
     gather(Type,
          Cases,
          -Region,
@@ -549,14 +554,14 @@ plot_growth_data<-function(db,
 
   db2<-db %>%
     filter(Region == region) %>%
-    filter(Type == "Nmb_Tested")
+    filter(Type == "New_Cases")
 
   growth2<-NULL
 
   if(nrow(db2) > 0){
   growth2<-get_growth(db2,
                       avg) %>%
-    mutate(Type = "Anzahl Tests\n(Täglich)")
+    mutate(Type = "Neue Fälle\n(Täglich)")
   }
 
   db3<-db %>%
@@ -1045,7 +1050,7 @@ plot_overview_short<-function(db,
 
   types <- c(
              #"Infected",
-             #"Dead",
+             "Dead",
              "In_Hospital",
              "Intensive_Care",
              "Currently_Ill")
@@ -1128,7 +1133,8 @@ plot_overview_short<-function(db,
     ggtitle(region) +
     theme(plot.title = element_text(hjust = 0.5)) +
 
-    xlab(date_lng)
+    xlab(date_lng)+
+    facet_wrap(.~Type, scales="free")
 
   if(log_scale){
     p <- p + scale_y_log10()
@@ -1520,16 +1526,16 @@ plot_infected_tests_ratio<-function(db,
 #        mutate(Tests_Ind = Nmb_Tested) %>%
         mutate(Infected_Ind = c(first_value_infected, diff(Infected))) %>%
     dplyr::select(Date, Tests_Ind, Infected_Ind) %>%
-    group_by(Week=week(Date)) %>%
-    summarize(Tests_Ind=sum(Tests_Ind), Infected_Ind=sum(Infected_Ind)) %>%
+    group_by(week=week(Date)) %>%
+    summarize(Tests_Ind=sum(Tests_Ind), Infected_Ind=sum(Infected_Ind), Date=first(Date)) %>%
     ungroup() %>%
-    dplyr::select(Week, Tests_Ind, Infected_Ind) %>%
+    dplyr::select(week, Date, Tests_Ind, Infected_Ind) %>%
     mutate(Prop_Infected_Tests = 100 * Infected_Ind/Tests_Ind) %>%
     na.omit() %>%
-    ggplot(aes(x = Week, y = Prop_Infected_Tests)) +
+    ggplot(aes(x = Date, y = Prop_Infected_Tests)) +
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1]) +
-    xlab("Woche 2020") +
+    xlab("Datum") +
     ylab("Verhaeltnis Covid-19 Infektionen zu Tests \n(wöchentlich in %)") +
     labs(caption = paste("Quelle: corin.at Letzter Datenpunkt:", get_last_date(db_o))) +
     ggtitle(region) +
@@ -1616,9 +1622,15 @@ plot_number_tests_aggregate<-function(db,
   p <- db %>%
     mutate(Tests_Ind = c(first_value_tests, diff(Nmb_Tested))) %>%
     #    mutate(Tests_Ind = Nmb_Tested) %>%
-    group_by(Month = month(Date)) %>%
-    summarize(Tests_Ind = mean(Tests_Ind)) %>%
-    ggplot(aes(x = Month, y = Tests_Ind)) +
+    mutate(Month = format(Date, '%Y-%m')) %>%
+    group_by(Month) %>%
+#    summarize(ym_mean = mean(x))
+
+
+ #   group_by(Month = month(Date)) %>%
+    summarize(Tests_Ind = mean(Tests_Ind),
+              Date=first(Date)) %>%
+    ggplot(aes(x = Date, y = Tests_Ind)) +
     geom_point(col = COLORS[1]) +
     geom_line(col = COLORS[1]) +
     xlab("Monat") +
@@ -1766,23 +1778,26 @@ plot_relative_values<-function(db,
   p <- db_diff %>%
     dplyr::select(Date, Type, Cases) %>%
     group_by(Week=week(Date), Type) %>%
-    summarize(Cases=sum(Cases)) %>%
+    summarize(Cases=sum(Cases),
+              Date=first(Date)) %>%
     spread(Type,Cases) %>%
     dplyr::select(-Nmb_Tested, -Recovered, -Infected) %>%
-    gather(Variable, Value, -Week, -Currently_Ill) %>%
+    gather(Variable, Value, -Week, -Currently_Ill, -Date) %>%
     mutate(Relative=(Value / Currently_Ill))   %>%
     mutate(Variable=ifelse(Variable=="Dead", "Verstorben", Variable)) %>%
     mutate(Variable=ifelse(Variable=="In_Hospital", "Hospitalisiert", Variable)) %>%
     mutate(Variable=ifelse(Variable=="Intensive_Care", "Intensivstation", Variable)) %>%
     ungroup() %>%
     filter(Week < max(Week)) %>%
-    ggplot(aes(x=Week, y=100*Relative)) +
+    ggplot(aes(x=Date, y=100*Relative)) +
     geom_line(aes(col=Variable)) +
     scale_color_manual(values = COLORS[c(1, 2, 5, 10)]) +
     labs(caption = paste("Quelle: corin.at Letzter Datenpunkt:", get_last_date(db))) +
     xlab("Woche 2020") +
-    ylab("Verhältnis Variable zu \nderzeitig positiv Getesteten (% - Logscale)") +
-    scale_y_log10()
+    ylab("Verhältnis Variable zu \nderzeitig positiv Getesteten (%)") +
+    facet_wrap(.~Variable, scales="free")
+  #+
+  #  scale_y_log10()
 
   ggsave(get_filename(RELATIVE_FILENAME,
                       filename_add),
@@ -1815,7 +1830,7 @@ how_long_until_daily_infections_below<-function(results,
 
   avg_day_growth_per_week<-(-1 *mean(diff_daily_growth %>% tail(7)))
 
-  growth_with_avg_decrease<-cumprod(1-seq(infection_growth %>% tail(1)*-1,by = avg_day_growth_per_week,length.out=28))
+  growth_with_avg_decrease<-cumprod(1-seq(infection_growth %>% tail(1)*-1,by = avg_day_growth_per_week,length.out=100))
 
   infected<-db_at %>% filter(Type=="Infected") %>%
     dplyr::select(Cases) %>%
